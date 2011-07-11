@@ -1,0 +1,7 @@
+Git + JIRA + Jenkins(Hudson) integration script
+
+Install:
+    git clone git@github.com:Altaire/git_jenkins_jira_integration.git /usr/local/
+
+Start:
+    python /usr/local/git_jenkins_jira_integration/main.py

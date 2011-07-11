@@ -1,0 +1,21 @@
+LOG_FILENAME = 'git_jenkins_jira_integration.log'
+
+GIT_REMOTE_PATH = "git@github.com:xxx/zzz.git"
+GIT_WORK_DIR = "/dev/shm/" + GIT_REMOTE_PATH
+
+JIRA_SOAP_SERVER = "https://jira.xxx.ru/rpc/soap/jirasoapservice-v2?wsdl"
+JIRA_USER = "username"
+JIRA_PASSWORD = "password"
+
+JENKINS_SERVER = "http://xxxx.ru:8080/"
+JENKINS_LOGIN = "username"
+JENKINS_PASSWORD = "password"
+JENKINS_JOB_CONFIG_TEMPLATE_PATH = "job/master/config.xml"
+
+#SELENIUM_CONFIG_PATH = "job/CriticalTest/config.xml"
+#SELENIUM_DOWNLOAD_ARTIFACTS_URL = "http://xxx.ru:8999/{branch}/workspace/{app}/target/{file}"
+
+branch_name_regexp = '^HH-[0-9]{1,10}[A-Za-z0-9-_,-,.]{0,64}'
+#branch_name_regexp = '.*?(HH-[0-9]{1,10}[A-Za-z0-9-_,-,.]{0,64})'
+jira_task_regexp = '^HH-[0-9]{1,10}'
+#jira_task_regexp = '.*?(HH-[0-9]{1,10})'
