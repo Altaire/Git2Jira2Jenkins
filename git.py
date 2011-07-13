@@ -1,7 +1,8 @@
 import os, re, shutil, threading, logging, config
-TRACE = True
+TRACE = False
 lock = threading.Lock()
 
+#TODO: non-blocking io with timeout
 def __subprocess(args):
     import subprocess
     with lock:
@@ -55,9 +56,11 @@ def remove_branch(branch):
 
 
 def checkout(branch):
-    cmd(['git', 'reset', 'HEAD'])
+    cmd(['git', 'reset', '--hard'])
+    cmd(['git', 'checkout-index', '-a', '-f'])
     cmd(['git', 'clean', '-fdxq'])
     cmd(['git', 'checkout', '-f', '--no-track', '-b', branch, 'remotes/origin/' + branch])
+    cmd(['git', 'reset'])
 
 def merge(branch='remotes/origin/master'):
     status, out, err = cmd(['git', 'merge', '-q', branch], print_err=False)
@@ -67,7 +70,7 @@ def merge(branch='remotes/origin/master'):
     return merge_status
 
 def get_diff():
-    raise 
+    raise
     status, out, err = cmd(['git', 'diff', '--name-status', '--exit-code', 'remotes/origin/master'],print_err=False)
     sql_status = "NO SQL"
     bsh_status = "NO BSH"

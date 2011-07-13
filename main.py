@@ -9,8 +9,8 @@ except:
     sys.exit()
 
 TRACE = False
-FORMAT = '%(asctime)-15s %(message)s'
-logging.basicConfig(filename=config.LOG_FILENAME, level=logging.INFO, format=FORMAT)
+FORMAT = '%(asctime)-15s  %(levelname)s %(message)s  %(funcName)s %(lineno)s %(exc_info)s'
+logging.basicConfig(filename=config.LOG_FILENAME, level=logging.DEBUG, format=FORMAT)
 
 global dbcon
 jira_resolution_map = {}
@@ -45,12 +45,14 @@ def git_update_heads():
 def git_delete_removed():
     remote_branches, local_branches = git.get_remote_and_local_branches()
     branches = set([i[0] for i in dbcon.execute('''select branch from branch;''').fetchall()])
-    dbcon.executemany('''delete branch where branch=?;''', branches.difference(set(remote_branches)))
+    diff = list(branches.difference(set(remote_branches)))
+    if diff:
+        dbcon.executemany('''delete branch where branch=?;''', diff)
 
 
-def git_merge_updated():
+def git_merge_updated(limit=100):
     remote_branches, local_branches = git.get_remote_and_local_branches()
-    q = dbcon.execute('''select branch from branch where not git_remote_branch_head is git_branch_head;''')
+    q = dbcon.execute('''select branch from branch where not git_remote_branch_head is git_branch_head limit %s;''' %(limit))
     for (branch,) in q.fetchall():
         _git_merge(branch, local_branches)
 
@@ -69,21 +71,19 @@ def _jira_update_task(soap, auth, jira_task_id):
         jira_status_map.get(task['status']),
         jira_resolution_map.get(task['resolution']),
         task['type'],
-        re.escape(task['summary']),
+        task['summary'],
         task['assignee'],
         int(time.time()),
         jira_task_id
         ))
-    #logging.debug("****_jira_update_task exception: %s" % (str(sys.exc_info())))
 
-
-def jira_update(all=False):
+def jira_update(all=False, limit=100):
     soap = SOAPpy.WSDL.Proxy(config.JIRA_SOAP_SERVER)
     auth = soap.login(config.JIRA_USER, config.JIRA_PASSWORD)
     if all:
         q = dbcon.execute('''select DISTINCT branch from branch;''')
     else:
-        q = dbcon.execute('''select DISTINCT branch from branch where jira_task_id is null;''')
+        q = dbcon.execute('''select DISTINCT branch from branch where jira_task_id is null limit %s;''' %(limit))
     branches = [i[0] for i in q.fetchall()]
     tasks_and_branches = [(re.match(config.jira_task_regexp, branch).group(), branch) for branch in branches]
     dbcon.executemany("update branch set jira_task_id=? where branch=?;", tasks_and_branches)
@@ -137,8 +137,16 @@ def jenkins_get_jobs_result():
         result = jenkins.get_job_result(branch).splitlines()
         ##TODO fix this bad code
         if len(result) > 8 and result[-1].find('Finished:') >= 0:
-            jenkins_status = result[-1].split(':')[1]
-            jenkins_branch_head = result[7].split()[3]
+            jenkins_status = result[-1].split(':')[1].strip()
+            if not 'ERROR: Nothing to do' in result:
+                x = result[7].split()
+                if 'Revision' in x:
+                    index = x.index('Revision')
+                    jenkins_branch_head = x[index+1]
+                else:
+                    jenkins_branch_head = 'UNKNOWN'
+            else:
+                jenkins_branch_head = 'UNKNOWN'
             print branch, jenkins_status, jenkins_branch_head
             if jenkins_status and jenkins_branch_head:
                 dbcon.execute(
@@ -161,6 +169,7 @@ def init_db():
 
     global dbcon
     dbcon = sqlite3.connect(":memory:", check_same_thread=False, isolation_level=None)
+    dbcon.row_factory = sqlite3.Row
     dbcon.execute('''create table branch (
                         branch text PRIMARY KEY DESC,
 
@@ -240,10 +249,10 @@ def init_scheduler():
         if TRACE: print inspect.stack()[0][3]
         jenkins_add_jobs()
 
-    @sched.interval_schedule(seconds=300)
+    @sched.interval_schedule(seconds=60)
     def sched_jenkins_get_jobs_result():
         if TRACE: print inspect.stack()[0][3]
-        jenkins_add_jobs()
+        jenkins_get_jobs_result()
 
     @sched.interval_schedule(seconds=300)
     def sched_jenkins_rebuild_failed_random():
@@ -259,9 +268,10 @@ if __name__ == '__main__':
 #    git.clone()
     git_update_heads()
     print('Please wait: Initial branch merging ...')
-    git_merge_updated()
+    git_merge_updated(limit=10)
     print('Please wait: Initial jira task information upload ...')
     jira_get_statuses_resolutions_priorities()
-    jira_update(all=True)
+#    jira_update(all=True)
+    jira_update(limit=10)
     init_scheduler()
     web_.init_web(dbcon)

@@ -1,0 +1,74 @@
+$def with(succ_merge_succ_build, succ_merge_fail_build, succ_merge_no_build, fail_merge, no_merge)
+
+<p>Мерджится с мастером и собирается: $len(succ_merge_succ_build)</p>
+<table border="1">
+$for branch in succ_merge_succ_build:
+    <tr>
+        <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
+        <!--<td>$branch['git_merge_status']</td>-->
+        <!--<td>$branch['git_branch_head'][:7]</td>-->
+        <!--<td>$branch['git_remote_branch_head'][:7]</td>-->
+        <!--<td>$branch['jenkins_branch_head'][:7]</td>-->
+        <!--<td>$branch['jenkins_status']</td>-->
+        <td>$branch['jira_task_summary']</td>
+        <td>$branch['jira_task_status']</td>
+        <td>$branch['jira_task_resolution']</td>
+    </tr>
+</table>
+
+<p>Мерджится с мастером и не собирается: $len(succ_merge_fail_build)</p>
+<table border="1">
+    $for branch in succ_merge_fail_build:
+    <tr>
+        <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
+        <!--<td>$branch['git_merge_status']</td>-->
+        <!--<td>$branch['git_branch_head'][:7]</td>-->
+        <!--<td>$branch['git_remote_branch_head'][:7]</td>-->
+        <!--<td>$branch['jenkins_branch_head'][:7]</td>-->
+        <!--<td>$branch['jenkins_status']</td>-->
+        <td>$branch['jira_task_summary']</td>
+        <td>$branch['jira_task_status']</td>
+        <td>$branch['jira_task_resolution']</td>
+    </tr>
+</table>
+
+<p>Не мерджится с мастером: $len(fail_merge)</p>
+<table border="1">
+    $for branch in fail_merge:
+    <tr>
+        <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
+        <!--<td>$branch['git_merge_status']</td>-->
+        <!--<td>$branch['git_branch_head'][:7]</td>-->
+        <!--<td>$branch['git_remote_branch_head'][:7]</td>-->
+        <td>$branch['jira_task_summary']</td>
+        <td>$branch['jira_task_status']</td>
+        <td>$branch['jira_task_resolution']</td>
+    </tr>
+</table>
+
+
+<p>Мерджится с мастером, еще не собиралось: $len(succ_merge_no_build) </p>
+<table border="1">
+    $for branch in succ_merge_no_build:
+    <tr>
+        <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
+        <!--<td>$branch['git_merge_status']</td>-->
+        <!--<td>$branch['git_branch_head'][:7]</td>-->
+        <!--<td>$branch['git_remote_branch_head'][:7]</td>-->
+        <td>$branch['jira_task_summary']</td>
+        <td>$branch['jira_task_status']</td>
+        <td>$branch['jira_task_resolution']</td>
+    </tr>
+</table>
+
+<p>Еще не мерджилось: $len(no_merge)</p>
+<table border="1">
+    $for branch in no_merge:
+    <tr>
+        <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
+        <!--<td>$branch['git_remote_branch_head'][:7]</td>-->
+        <td>$branch['jira_task_summary']</td>
+        <td>$branch['jira_task_status']</td>
+        <td>$branch['jira_task_resolution']</td>
+    </tr>
+</table>
