@@ -131,7 +131,7 @@ def jenkins_delete_jobs():
 
 
 def jenkins_get_jobs_result():
-    current_jobs = set([i['name'] for i in jenkins.get_jobs()])
+    current_jobs = set([i['name'] for i in jenkins.get_jobs() if (i['color'] in ['red', 'blue', 'yellow'])])
     matched_jobs = filter(lambda job: re.match(config.branch_name_regexp, job), current_jobs)
     for branch in matched_jobs:
         result = jenkins.get_job_result(branch).splitlines()
