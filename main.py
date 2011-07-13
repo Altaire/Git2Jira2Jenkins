@@ -10,7 +10,7 @@ except:
 
 TRACE = False
 FORMAT = '%(asctime)-15s  %(levelname)s %(message)s  %(funcName)s %(lineno)s %(exc_info)s'
-logging.basicConfig(filename=config.LOG_FILENAME, level=logging.DEBUG, format=FORMAT)
+logging.basicConfig(filename=config.LOG_FILENAME, level=logging.WARNING, format=FORMAT)
 
 global dbcon
 jira_resolution_map = {}
@@ -100,10 +100,13 @@ def jira_get_statuses_resolutions_priorities():
     auth = soap.login(config.JIRA_USER, config.JIRA_PASSWORD)
     for i in soap.getStatuses(auth):
         jira_status_map[i['id']] = i['name']
+        jira_status_map[i['name']+'_icon'] = i['icon']
     for i in soap.getResolutions(auth):
         jira_resolution_map[i['id']] = i['name']
+        jira_resolution_map[i['name']+'_icon'] = i['icon']
     for i in soap.getPriorities(auth):
         jira_priority_map[i['id']] = i['name']
+        jira_priority_map[i['name']+'_icon'] = i['icon']
     soap.logout()
 
 
@@ -147,7 +150,7 @@ def jenkins_get_jobs_result():
                     jenkins_branch_head = 'UNKNOWN'
             else:
                 jenkins_branch_head = 'UNKNOWN'
-            print branch, jenkins_status, jenkins_branch_head
+#            print branch, jenkins_status, jenkins_branch_head
             if jenkins_status and jenkins_branch_head:
                 dbcon.execute(
                     '''update branch set jenkins_status=?, jenkins_branch_head=?, jenkins_last_update_time=? where branch=?;'''
@@ -274,4 +277,4 @@ if __name__ == '__main__':
 #    jira_update(all=True)
     jira_update(limit=10)
     init_scheduler()
-    web_.init_web(dbcon)
+    web_.init_web(dbcon, jira_priority_map)

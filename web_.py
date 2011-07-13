@@ -11,35 +11,45 @@ except:
 
 def succ_merge_succ_build(dbcon):
     return dbcon.execute(
-        '''select * from branch where (git_remote_branch_head is git_branch_head)
+        '''select * from branch where (git_remote_branch_head is git_branch_head) 
          and (git_merge_status is 'MERGED')
+         and (jira_task_status is 'Need testing')
          and (git_remote_branch_head is jenkins_branch_head)
-         and (jenkins_status is 'SUCCESS');''').fetchall()
+         and (jenkins_status is 'SUCCESS')
+         order by jira_task_priority;''').fetchall()
 
 
 def succ_merge_fail_build(dbcon):
     return dbcon.execute(
         '''select * from branch where (git_remote_branch_head is git_branch_head)
          and (git_merge_status is 'MERGED')
+         and (jira_task_status is 'Need testing')
          and (git_remote_branch_head is jenkins_branch_head)
-         and not (jenkins_status is 'SUCCESS');''').fetchall()
+         and not (jenkins_status is 'SUCCESS')
+         order by jira_task_priority;''').fetchall()
 
 
 def succ_merge_no_build(dbcon):
     return dbcon.execute(
         '''select * from branch where (git_remote_branch_head is git_branch_head)
         and (git_merge_status is 'MERGED')
-        and not (git_remote_branch_head is jenkins_branch_head);''').fetchall()
+        and (jira_task_status is 'Need testing')
+        and not (git_remote_branch_head is jenkins_branch_head)
+        order by jira_task_priority;''').fetchall()
 
 
 def fail_merge(dbcon):
     return dbcon.execute(
         '''select * from branch where (git_remote_branch_head is git_branch_head)
-         and not git_merge_status is 'MERGED';''').fetchall()
+        and (jira_task_status is 'Need testing')
+        and not (git_merge_status is 'MERGED')
+        order by jira_task_priority;''').fetchall()
 
 
 def no_merge(dbcon):
-    return dbcon.execute('''select * from branch where not (git_remote_branch_head is git_branch_head);''').fetchall()
+    return dbcon.execute('''select * from branch where not (git_remote_branch_head is git_branch_head)
+    and (jira_task_status is 'Need testing')
+    order by jira_task_priority;''').fetchall()
 
 
 urls = ("/",    "Index",
@@ -48,13 +58,15 @@ urls = ("/",    "Index",
 class Index:
     def GET(self):
         dbcon = web.ctx.globals.dbcon
+        jira_priority_map = web.ctx.globals.jira_priority_map
         render = web.template.render('templates/')
         return render.index(
             succ_merge_succ_build(dbcon),
             succ_merge_fail_build(dbcon),
             succ_merge_no_build(dbcon),
             fail_merge(dbcon),
-            no_merge(dbcon))
+            no_merge(dbcon),
+            jira_priority_map)
 
 class Txt:
     def GET(self):
@@ -62,8 +74,8 @@ class Txt:
         return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
 
 
-def add_global_hoSUCCESS(dbcon):
-    g = web.storage({"dbcon": dbcon})
+def add_global_hoSUCCESS(glob):
+    g = web.storage(glob)
 
     def _wrapper(handler):
         web.ctx.globals = g
@@ -72,11 +84,11 @@ def add_global_hoSUCCESS(dbcon):
     return _wrapper
 
 
-def init_web(dbcon):
+def init_web(dbcon, jira_priority_map):
     import sys
 
     sys.argv[1:] = ['8888']
     app = web.application(urls, globals())
-    app.add_processor(add_global_hoSUCCESS(dbcon))
+    app.add_processor(add_global_hoSUCCESS({'dbcon':dbcon,'jira_priority_map': jira_priority_map}))
     print 'Serving on:'
     application = app.run()
