@@ -4,6 +4,7 @@ try:
     import SOAPpy
 except:
     import sys
+
     print "Please do (for Ubuntu):\n\tsudo apt-get install python-soappy \nEXIT"
     sys.exit()
 
@@ -29,6 +30,7 @@ def _git_merge(branch, local_branches):
         '''update branch set git_branch_head=?, git_merge_status=?, git_sql_info=?, git_bsh_info=?, git_config_info=?, git_last_update_time=? where branch=?;'''
         ,
         (git_branch_head, git_merge_status, git_sql_info, git_bsh_info, git_config_info, int(time.time()), branch))
+
 
 def git_update_heads():
     git.fetch()
@@ -63,16 +65,17 @@ def _jira_update_task(soap, auth, jira_task_id):
 						jira_task_summary=?,
 						jira_task_assignee=?,
 						jira_last_update_time=? where jira_task_id=?;''', (
-    jira_priority_map[task['priority']],
-    jira_status_map.get(task['status']),
-    jira_resolution_map.get(task['resolution']),
-    task['type'],
-    re.escape(task['summary']),
-    task['assignee'],
-    int(time.time()),
-    jira_task_id
-    ))
+        jira_priority_map[task['priority']],
+        jira_status_map.get(task['status']),
+        jira_resolution_map.get(task['resolution']),
+        task['type'],
+        re.escape(task['summary']),
+        task['assignee'],
+        int(time.time()),
+        jira_task_id
+        ))
     #logging.debug("****_jira_update_task exception: %s" % (str(sys.exc_info())))
+
 
 def jira_update(all=False):
     soap = SOAPpy.WSDL.Proxy(config.JIRA_SOAP_SERVER)
@@ -110,13 +113,13 @@ def jenkins_add_jobs(limit=2):
         '''select branch from branch where jira_task_status='Need testing' and git_merge_status='MERGED'
         and not git_branch_head is jenkins_branch_head;''').fetchall()])
     config_template = jenkins.get_config()
-    
+
     new_jobs = list(branches_to_build.difference(current_jobs))[:limit]
     for branch in new_jobs:
         job_config = config_template.replace('remotes/origin/master', branch).replace(config.GIT_REMOTE_PATH,
                                                                                       'file://' + config.GIT_WORK_DIR + '/.git/')
         jenkins.create_job(branch, job_config)
-        jenkins.build_job(branch)
+        jenkins.trigger_build(branch)
 
 
 def jenkins_delete_jobs():
@@ -133,7 +136,7 @@ def jenkins_get_jobs_result():
     for branch in matched_jobs:
         result = jenkins.get_job_result(branch).splitlines()
         ##TODO fix this bad code
-        if len(result)>8 and result[-1].find('Finished:') >=0:
+        if len(result) > 8 and result[-1].find('Finished:') >= 0:
             jenkins_status = result[-1].split(':')[1]
             jenkins_branch_head = result[7].split()[3]
             print branch, jenkins_status, jenkins_branch_head
@@ -141,6 +144,16 @@ def jenkins_get_jobs_result():
                 dbcon.execute(
                     '''update branch set jenkins_status=?, jenkins_branch_head=?, jenkins_last_update_time=? where branch=?;'''
                     , (jenkins_status, jenkins_branch_head, int(time.time()), branch))
+
+
+def jenkins_rebuild_failed_random():
+    import random
+
+    failed_jobs = [i['name'] for i in jenkins.get_jobs() if
+        (re.match(config.branch_name_regexp, i['name']) and i['color'] == 'red')]
+    if len(failed_jobs) > 0:
+        random_job = failed_jobs[random.randint(0, len(failed_jobs) - 1)]
+        jenkins.trigger_build(random_job)
 
 
 def init_db():
@@ -181,14 +194,16 @@ def init_db():
 
 def init_scheduler():
     import inspect
+
     try:
         from apscheduler.scheduler import Scheduler
     except:
         import sys
+
         print "Please do:\n\tsudo easy_install apscheduler \nEXIT"
         sys.exit()
     sched = Scheduler()
-    sched.configure({'daemonic':'True'})
+    sched.configure({'daemonic': 'True'})
 
     @sched.interval_schedule(seconds=30)
     def sched_git_update_heads():
@@ -230,13 +245,18 @@ def init_scheduler():
         if TRACE: print inspect.stack()[0][3]
         jenkins_add_jobs()
 
+    @sched.interval_schedule(seconds=300)
+    def sched_jenkins_rebuild_failed_random():
+        if TRACE: print inspect.stack()[0][3]
+        jenkins_rebuild_failed_random()
+
     sched.start()
 
 
 if __name__ == '__main__':
     init_db()
     print('Please wait: cloning %s ...' % (config.GIT_REMOTE_PATH))
-    git.clone()
+#    git.clone()
     git_update_heads()
     print('Please wait: Initial branch merging ...')
     git_merge_updated()

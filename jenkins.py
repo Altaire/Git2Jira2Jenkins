@@ -30,3 +30,6 @@ def get_config():
 
 def get_job_result(job_name):
     return _urlopen('job/{0}/lastBuild/consoleText'.format(job_name))
+
+def trigger_build(job_name):
+    return _urlopen('job/{0}/build?token={1}'.format(job_name, config.JENKINS_JOB_REBUILD_TOKEN))
