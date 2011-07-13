@@ -8,25 +8,25 @@ except:
 
 
 def web_get_ready():
-    branches = set([i[0] for i in main.dbcon.cursor().execute(
+    branches = set([i[0] for i in main.dbcon.execute(
         '''select branch from branch where (remote_branch_head is branch_head) and (remote_branch_head is jenkins_branch_head) and jenkins_status='OK';''').fetchall()])
     return branches
 
 
 def web_get_failed():
-    branches = set([i[0] for i in main.dbcon.cursor().execute(
+    branches = set([i[0] for i in main.dbcon.execute(
         '''select branch from branch where (remote_branch_head is branch_head) and (remote_branch_head is jenkins_branch_head) and jenkins_status!='OK';''').fetchall()])
     return branches
 
 
 def web_get_conflicted():
-    branches = set([i[0] for i in main.dbcon.cursor().execute(
+    branches = set([i[0] for i in main.dbcon.execute(
         '''select branch from branch where (remote_branch_head is branch_head) and (remote_branch_head is jenkins_branch_head) and jenkins_status='OK';''').fetchall()])
     return branches
 
 
 def web_get_conflicted_for_user():
-    branches = set([i[0] for i in main.dbcon.cursor().execute(
+    branches = set([i[0] for i in main.dbcon.execute(
         '''select branch from branch where (remote_branch_head is branch_head) and (remote_branch_head is jenkins_branch_head) and jenkins_status='OK';''').fetchall()])
     return branches
 
@@ -34,9 +34,8 @@ def web_get_conflicted_for_user():
 urls = ("/", "Index")
 class Index:
     def GET(self):
-        c = web.ctx.globals.dbcon.cursor()
-        c.execute('''select * from branch;''')
-        return '\n'.join(map(lambda x: str(x), c.fetchall()))
+        c = web.ctx.globals.dbcon.execute('''select * from branch;''').fetchall()
+        return '\n'.join(map(lambda x: str(x), c))
 
 def add_global_hook(dbcon):
     g = web.storage({"dbcon": dbcon})

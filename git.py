@@ -1,22 +1,20 @@
-import os, re, shutil, logging, config
-TRACE = False
+import os, re, shutil, threading, logging, config
+TRACE = True
+lock = threading.Lock()
 
 def __subprocess(args):
     import subprocess
-    pipe = subprocess.Popen(args, cwd=config.GIT_WORK_DIR, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-    status = pipe.wait()
-    out = pipe.stdout.read()
-    err = pipe.stderr.read()
-    if status is not 0:
-        return True, out, err
-    return False, out, err
+    with lock:
+        pipe = subprocess.Popen(args, cwd=config.GIT_WORK_DIR, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        status = pipe.wait()
+        out = pipe.stdout.read()
+        err = pipe.stderr.read()
+        if status is not 0:
+            return True, out, err
+        return False, out, err
 
 def cmd(args, print_err=True, timeout=1):
     logging.debug('[GIT] Action: ' + str(args))
-#    import multiprocessing
-#    pool = multiprocessing.Pool(processes=1)
-#    result = pool.apply_async(__subprocess, [args])
-#    status, out, err = result.get(timeout=timeout)
     status, out, err = __subprocess(args)
     if status and print_err:
         logging.warning('[GIT] Cannot do action: ' + str(args))
@@ -57,6 +55,7 @@ def remove_branch(branch):
 
 
 def checkout(branch):
+    cmd(['git', 'reset', 'HEAD'])
     cmd(['git', 'clean', '-fdxq'])
     cmd(['git', 'checkout', '-f', '--no-track', '-b', branch, 'remotes/origin/' + branch])
 

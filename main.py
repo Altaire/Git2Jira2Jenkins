@@ -1,8 +1,9 @@
-import logging, re, inspect, time, config, git, jenkins, web_
+import logging, re, time, config, git, jenkins, web_
 
 try:
     import SOAPpy
 except:
+    import sys
     print "Please do (for Ubuntu):\n\tsudo apt-get install python-soappy \nEXIT"
     sys.exit()
 
@@ -24,12 +25,10 @@ def _git_merge(branch, local_branches):
     git_merge_status = git.merge()
     #sql_info, bsh_info, config_info = git.get_diff()
     git_sql_info, git_bsh_info, git_config_info = None, None, None
-    dbcon.cursor().execute(
+    dbcon.execute(
         '''update branch set git_branch_head=?, git_merge_status=?, git_sql_info=?, git_bsh_info=?, git_config_info=?, git_last_update_time=? where branch=?;'''
         ,
         (git_branch_head, git_merge_status, git_sql_info, git_bsh_info, git_config_info, int(time.time()), branch))
-    dbcon.commit()
-
 
 def git_update_heads():
     git.fetch()
@@ -43,20 +42,20 @@ def git_update_heads():
 
 def git_delete_removed():
     remote_branches, local_branches = git.get_remote_and_local_branches()
-    branches = set([i['branch'] for i in dbcon.cursor().execute('''select branch from branch;''').fetchall()])
+    branches = set([i[0] for i in dbcon.execute('''select branch from branch;''').fetchall()])
     dbcon.executemany('''delete branch where branch=?;''', branches.difference(set(remote_branches)))
 
 
 def git_merge_updated():
     remote_branches, local_branches = git.get_remote_and_local_branches()
-    q = dbcon.cursor().execute('''select branch from branch where not git_remote_branch_head is git_branch_head;''')
+    q = dbcon.execute('''select branch from branch where not git_remote_branch_head is git_branch_head;''')
     for (branch,) in q.fetchall():
         _git_merge(branch, local_branches)
 
 
 def _jira_update_task(soap, auth, jira_task_id):
     task = soap.getIssue(auth, jira_task_id)
-    dbcon.cursor().execute('''update branch set
+    dbcon.execute('''update branch set
 						jira_task_priority=?,
 						jira_task_status=?,
 						jira_task_resolution=?,
@@ -79,9 +78,9 @@ def jira_update(all=False):
     soap = SOAPpy.WSDL.Proxy(config.JIRA_SOAP_SERVER)
     auth = soap.login(config.JIRA_USER, config.JIRA_PASSWORD)
     if all:
-        q = dbcon.cursor().execute('''select DISTINCT branch from branch;''')
+        q = dbcon.execute('''select DISTINCT branch from branch;''')
     else:
-        q = dbcon.cursor().execute('''select DISTINCT branch from branch where jira_task_id is null;''')
+        q = dbcon.execute('''select DISTINCT branch from branch where jira_task_id is null;''')
     branches = [i[0] for i in q.fetchall()]
     tasks_and_branches = [(re.match(config.jira_task_regexp, branch).group(), branch) for branch in branches]
     dbcon.executemany("update branch set jira_task_id=? where branch=?;", tasks_and_branches)
@@ -107,7 +106,7 @@ def jira_get_statuses_resolutions_priorities():
 
 def jenkins_add_jobs(limit=2):
     current_jobs = set([i['name'] for i in jenkins.get_jobs()])
-    branches_to_build = set([i[0] for i in dbcon.cursor().execute(
+    branches_to_build = set([i[0] for i in dbcon.execute(
         '''select branch from branch where jira_task_status='Need testing' and git_merge_status='MERGED'
         and not git_branch_head is jenkins_branch_head;''').fetchall()])
     config_template = jenkins.get_config()
@@ -122,7 +121,7 @@ def jenkins_add_jobs(limit=2):
 
 def jenkins_delete_jobs():
     jobs = set([i['name'] for i in jenkins.get_jobs() if re.match(config.branch_name_regexp, i['name'])])
-    branches = set([i[0] for i in dbcon.cursor().execute(
+    branches = set([i[0] for i in dbcon.execute(
         '''select branch from branch;''').fetchall()])
     for branch in jobs.difference(branches):
         jenkins.delete_job(branch)
@@ -139,21 +138,17 @@ def jenkins_get_jobs_result():
             jenkins_branch_head = result[7].split()[3]
             print branch, jenkins_status, jenkins_branch_head
             if jenkins_status and jenkins_branch_head:
-                dbcon.cursor().execute(
+                dbcon.execute(
                     '''update branch set jenkins_status=?, jenkins_branch_head=?, jenkins_last_update_time=? where branch=?;'''
                     , (jenkins_status, jenkins_branch_head, int(time.time()), branch))
-                dbcon.commit()
-
-
-
 
 
 def init_db():
     import sqlite3
 
     global dbcon
-    dbcon = sqlite3.connect(":memory:", check_same_thread=False); #~ con.isolation_level = None
-    dbcon.cursor().execute('''create table branch (
+    dbcon = sqlite3.connect(":memory:", check_same_thread=False, isolation_level=None)
+    dbcon.execute('''create table branch (
                         branch text PRIMARY KEY DESC,
 
                         git_branch_head text,
@@ -182,15 +177,14 @@ def init_db():
                         selenium_branch_head text,
                         selenium_last_update_time text
                         );''')
-    dbcon.commit()
 
 
 def init_scheduler():
-    import sys
-
+    import inspect
     try:
         from apscheduler.scheduler import Scheduler
     except:
+        import sys
         print "Please do:\n\tsudo easy_install apscheduler \nEXIT"
         sys.exit()
     sched = Scheduler()
@@ -241,9 +235,12 @@ def init_scheduler():
 
 if __name__ == '__main__':
     init_db()
+    print('Please wait: cloning %s ...' % (config.GIT_REMOTE_PATH))
     git.clone()
     git_update_heads()
+    print('Please wait: Initial branch merging ...')
     git_merge_updated()
+    print('Please wait: Initial jira task information upload ...')
     jira_get_statuses_resolutions_priorities()
     jira_update(all=True)
     init_scheduler()
