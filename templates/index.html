@@ -1,32 +1,28 @@
-$def with(succ_merge_succ_build, succ_merge_fail_build, succ_merge_no_build, fail_merge, no_merge, jira_priority_map)
+$def with(statistics, succ_merge_succ_build, succ_merge_fail_build, succ_merge_no_build, fail_merge, no_merge, jira_priority_map)
 <html>
 <head>
     <title>Git branch status</title>
     <link rel="stylesheet" type="text/css" href="/static/smoothtaste.css"/>
     <link rel="stylesheet" type="text/css" href="/static/main.css"/>
 </head>
-<br/>
-<br/>
-
-
 
 <body>
+
+<a>Статистика:</a><br/>
+    $for stat in statistics:
+        <a>$stat['jira_task_status']: $stat['count(*)']</a><br/>
+<br/>
+
 <a>Мерджится с мастером и собирается: $len(succ_merge_succ_build)</a>
 <table>
     $for branch in succ_merge_succ_build:
     <tr>
         <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
-        <!--<td>$branch['git_merge_status']</td>-->
-        <!--<td>$branch['git_branch_head'][:7]</td>-->
-        <!--<td>$branch['git_remote_branch_head'][:7]</td>-->
-        <!--<td>$branch['jenkins_branch_head'][:7]</td>-->
-        <!--<td>$branch['jenkins_status']</td>-->
         <td>
-            <img src="$jira_priority_map[branch['jira_task_priority'] + '_icon']" alt="$branch['jira_task_priority']" title="$branch['jira_task_priority']" width="16" align="absmiddle" border="0" height="16">
+            <img src="$jira_priority_map[branch['jira_task_priority'] + '_icon']" alt="$branch['jira_task_priority']"
+                 title="$branch['jira_task_priority']" width="16" align="absmiddle" border="0" height="16">
         </td>
         <td>$branch['jira_task_summary']</td>
-        <!--<td>$branch['jira_task_status']</td>-->
-        <!--<td>$branch['jira_task_resolution']</td>-->
     </tr>
 </table>
 <br/>
@@ -36,17 +32,11 @@ $def with(succ_merge_succ_build, succ_merge_fail_build, succ_merge_no_build, fai
     $for branch in succ_merge_fail_build:
     <tr>
         <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
-        <!--<td>$branch['git_merge_status']</td>-->
-        <!--<td>$branch['git_branch_head'][:7]</td>-->
-        <!--<td>$branch['git_remote_branch_head'][:7]</td>-->
-        <!--<td>$branch['jenkins_branch_head'][:7]</td>-->
-        <!--<td>$branch['jenkins_status']</td>-->
         <td>
-            <img src="$jira_priority_map[branch['jira_task_priority'] + '_icon']" alt="$branch['jira_task_priority']" title="$branch['jira_task_priority']" width="16" align="absmiddle" border="0" height="16">
+            <img src="$jira_priority_map[branch['jira_task_priority'] + '_icon']" alt="$branch['jira_task_priority']"
+                 title="$branch['jira_task_priority']" width="16" align="absmiddle" border="0" height="16">
         </td>
         <td>$branch['jira_task_summary']</td>
-        <!--<td>$branch['jira_task_status']</td>-->
-        <!--<td>$branch['jira_task_resolution']</td>-->
     </tr>
 </table>
 <br/>
@@ -56,16 +46,13 @@ $def with(succ_merge_succ_build, succ_merge_fail_build, succ_merge_no_build, fai
 <table>
     $for branch in fail_merge:
     <tr>
+        <td><input type="checkbox"/></td>
         <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
-        <!--<td>$branch['git_merge_status']</td>-->
-        <!--<td>$branch['git_branch_head'][:7]</td>-->
-        <!--<td>$branch['git_remote_branch_head'][:7]</td>-->
         <td>
-            <img src="$jira_priority_map[branch['jira_task_priority'] + '_icon']" alt="$branch['jira_task_priority']" title="$branch['jira_task_priority']" width="16" align="absmiddle" border="0" height="16">
+            <img src="$jira_priority_map[branch['jira_task_priority'] + '_icon']" alt="$branch['jira_task_priority']"
+                 title="$branch['jira_task_priority']" width="16" align="absmiddle" border="0" height="16">
         </td>
         <td>$branch['jira_task_summary']</td>
-        <!--<td>$branch['jira_task_status']</td>-->
-        <!--<td>$branch['jira_task_resolution']</td>-->
     </tr>
 </table>
 <br/>
@@ -76,15 +63,11 @@ $def with(succ_merge_succ_build, succ_merge_fail_build, succ_merge_no_build, fai
     $for branch in succ_merge_no_build:
     <tr>
         <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
-        <!--<td>$branch['git_merge_status']</td>-->
-        <!--<td>$branch['git_branch_head'][:7]</td>-->
-        <!--<td>$branch['git_remote_branch_head'][:7]</td>-->
         <td>
-            <img src="$jira_priority_map[branch['jira_task_priority'] + '_icon']" alt="$branch['jira_task_priority']" title="$branch['jira_task_priority']" width="16" align="absmiddle" border="0" height="16">
+            <img src="$jira_priority_map[branch['jira_task_priority'] + '_icon']" alt="$branch['jira_task_priority']"
+                 title="$branch['jira_task_priority']" width="16" align="absmiddle" border="0" height="16">
         </td>
         <td>$branch['jira_task_summary']</td>
-        <!--<td>$branch['jira_task_status']</td>-->
-        <!--<td>$branch['jira_task_resolution']</td>-->
     </tr>
 </table>
 <br/>
@@ -94,13 +77,11 @@ $def with(succ_merge_succ_build, succ_merge_fail_build, succ_merge_no_build, fai
     $for branch in no_merge:
     <tr>
         <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
-        <!--<td>$branch['git_remote_branch_head'][:7]</td>-->
         <td>
-            <img src="$jira_priority_map[branch['jira_task_priority'] + '_icon']" alt="$branch['jira_task_priority']" title="$branch['jira_task_priority']" width="16" align="absmiddle" border="0" height="16">
+            <img src="$jira_priority_map[branch['jira_task_priority'] + '_icon']" alt="$branch['jira_task_priority']"
+                 title="$branch['jira_task_priority']" width="16" align="absmiddle" border="0" height="16">
         </td>
         <td>$branch['jira_task_summary']</td>
-        <!--<td>$branch['jira_task_status']</td>-->
-        <!--<td>$branch['jira_task_resolution']</td>-->
     </tr>
 </table>
 <br/>

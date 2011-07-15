@@ -7,9 +7,8 @@ def __subprocess(args):
     import subprocess
     with lock:
         pipe = subprocess.Popen(args, cwd=config.GIT_WORK_DIR, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        status = pipe.wait()
-        out = pipe.stdout.read()
-        err = pipe.stderr.read()
+        out, err = pipe.communicate()
+        status =  pipe.returncode
         if status is not 0:
             return True, out, err
         return False, out, err
@@ -56,11 +55,13 @@ def remove_branch(branch):
 
 
 def checkout(branch):
-    cmd(['git', 'reset', '--hard'])
-    cmd(['git', 'checkout-index', '-a', '-f'])
-    cmd(['git', 'clean', '-fdxq'])
+    #cmd(['git', 'reset', '--hard'])
+    #cmd(['git', 'checkout-index', '-a', '-f']
+    cmd(['git', 'reset'])
     cmd(['git', 'checkout', '-f', '--no-track', '-b', branch, 'remotes/origin/' + branch])
     cmd(['git', 'reset'])
+    cmd(['git', 'clean', '-fdxq'])
+
 
 def merge(branch='remotes/origin/master'):
     status, out, err = cmd(['git', 'merge', '-q', branch], print_err=False)

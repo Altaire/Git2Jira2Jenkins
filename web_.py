@@ -24,8 +24,7 @@ def succ_merge_fail_build(dbcon):
         '''select * from branch where (git_remote_branch_head is git_branch_head)
          and (git_merge_status is 'MERGED')
          and (jira_task_status is 'Need testing')
-         and (git_remote_branch_head is jenkins_branch_head)
-         and not (jenkins_status is 'SUCCESS')
+         and ((jenkins_status is 'FAILED') or (jenkins_status is 'UNSTABLE'))
          order by jira_task_priority;''').fetchall()
 
 
@@ -52,6 +51,9 @@ def no_merge(dbcon):
     order by jira_task_priority;''').fetchall()
 
 
+def get_statistics(dbcon):
+    return dbcon.execute('''select jira_task_status, count(*) from branch group by jira_task_status;''').fetchall()
+
 urls = ("/",    "Index",
         '/txt', "Txt")
 
@@ -61,6 +63,7 @@ class Index:
         jira_priority_map = web.ctx.globals.jira_priority_map
         render = web.template.render('templates/')
         return render.index(
+            get_statistics(dbcon),
             succ_merge_succ_build(dbcon),
             succ_merge_fail_build(dbcon),
             succ_merge_no_build(dbcon),

@@ -1,4 +1,4 @@
-import logging, re, time, config, git, jenkins, web_
+import multiprocessing, logging, re, time, config, git, jenkins, web_
 
 try:
     import SOAPpy
@@ -8,9 +8,9 @@ except:
     print "Please do (for Ubuntu):\n\tsudo apt-get install python-soappy \nEXIT"
     sys.exit()
 
-TRACE = False
+TRACE = True
 FORMAT = '%(asctime)-15s  %(levelname)s %(message)s  %(funcName)s %(lineno)s %(exc_info)s'
-logging.basicConfig(filename=config.LOG_FILENAME, level=logging.WARNING, format=FORMAT)
+logging.basicConfig(filename=config.LOG_FILENAME, level=logging.INFO, format=FORMAT)
 
 global dbcon
 jira_resolution_map = {}
@@ -24,18 +24,18 @@ def _git_merge(branch, local_branches):
     git.checkout(branch)
     git_branch_head = git.get_head(branch)
     git_merge_status = git.merge()
+    git_merged_branch_head = git.get_head(branch)
     #sql_info, bsh_info, config_info = git.get_diff()
     git_sql_info, git_bsh_info, git_config_info = None, None, None
     dbcon.execute(
-        '''update branch set git_branch_head=?, git_merge_status=?, git_sql_info=?, git_bsh_info=?, git_config_info=?, git_last_update_time=? where branch=?;'''
+        '''update branch set git_branch_head=?, git_merged_branch_head=?, git_merge_status=?, git_sql_info=?, git_bsh_info=?, git_config_info=?, git_last_update_time=? where branch=?;'''
         ,
-        (git_branch_head, git_merge_status, git_sql_info, git_bsh_info, git_config_info, int(time.time()), branch))
+        (git_branch_head, git_merged_branch_head, git_merge_status, git_sql_info, git_bsh_info, git_config_info, int(time.time()), branch))
 
 
-def git_update_heads():
+def git_update_remote_heads():
     git.fetch()
     remote_branch_heads = git.get_all_remote_branch_heads(branch_regexp=config.branch_name_regexp)
-    ##TODO: use insert or update
     dbcon.executemany("insert or ignore into branch(branch, git_remote_branch_head) values (?, ?);",
                       remote_branch_heads)
     dbcon.executemany("update branch set git_remote_branch_head=? where branch=?;",
@@ -45,15 +45,15 @@ def git_update_heads():
 def git_delete_removed():
     remote_branches, local_branches = git.get_remote_and_local_branches()
     branches = set([i[0] for i in dbcon.execute('''select branch from branch;''').fetchall()])
-    diff = list(branches.difference(set(remote_branches)))
-    if diff:
-        dbcon.executemany('''delete branch where branch=?;''', diff)
+    diff = branches.difference(set(remote_branches))
+    dbcon.executemany('''delete from branch where branch=?;''', map(lambda x: (x,), diff))
 
 
 def git_merge_updated(limit=100):
     remote_branches, local_branches = git.get_remote_and_local_branches()
-    q = dbcon.execute('''select branch from branch where not git_remote_branch_head is git_branch_head limit %s;''' %(limit))
-    for (branch,) in q.fetchall():
+    q = dbcon.execute(
+        '''select branch from branch where not git_remote_branch_head is git_branch_head limit %s;''' % (limit)).fetchall()
+    for (branch,) in q:
         _git_merge(branch, local_branches)
 
 
@@ -77,13 +77,14 @@ def _jira_update_task(soap, auth, jira_task_id):
         jira_task_id
         ))
 
-def jira_update(all=False, limit=100):
+
+def jira_update(all=False, limit=50):
     soap = SOAPpy.WSDL.Proxy(config.JIRA_SOAP_SERVER)
     auth = soap.login(config.JIRA_USER, config.JIRA_PASSWORD)
     if all:
         q = dbcon.execute('''select DISTINCT branch from branch;''')
     else:
-        q = dbcon.execute('''select DISTINCT branch from branch where jira_task_id is null limit %s;''' %(limit))
+        q = dbcon.execute('''select DISTINCT branch from branch where jira_task_id is null limit %s;''' % (limit))
     branches = [i[0] for i in q.fetchall()]
     tasks_and_branches = [(re.match(config.jira_task_regexp, branch).group(), branch) for branch in branches]
     dbcon.executemany("update branch set jira_task_id=? where branch=?;", tasks_and_branches)
@@ -100,29 +101,31 @@ def jira_get_statuses_resolutions_priorities():
     auth = soap.login(config.JIRA_USER, config.JIRA_PASSWORD)
     for i in soap.getStatuses(auth):
         jira_status_map[i['id']] = i['name']
-        jira_status_map[i['name']+'_icon'] = i['icon']
+        jira_status_map[i['name'] + '_icon'] = i['icon']
     for i in soap.getResolutions(auth):
         jira_resolution_map[i['id']] = i['name']
-        jira_resolution_map[i['name']+'_icon'] = i['icon']
+        jira_resolution_map[i['name'] + '_icon'] = i['icon']
     for i in soap.getPriorities(auth):
         jira_priority_map[i['id']] = i['name']
-        jira_priority_map[i['name']+'_icon'] = i['icon']
+        jira_priority_map[i['name'] + '_icon'] = i['icon']
     soap.logout()
 
 
-def jenkins_add_jobs(limit=2):
+def jenkins_add_jobs(limit=10):
     current_jobs = set([i['name'] for i in jenkins.get_jobs()])
     branches_to_build = set([i[0] for i in dbcon.execute(
         '''select branch from branch where jira_task_status='Need testing' and git_merge_status='MERGED'
         and not git_branch_head is jenkins_branch_head;''').fetchall()])
     config_template = jenkins.get_config()
-
     new_jobs = list(branches_to_build.difference(current_jobs))[:limit]
-    for branch in new_jobs:
-        job_config = config_template.replace('remotes/origin/master', branch).replace(config.GIT_REMOTE_PATH,
-                                                                                      'file://' + config.GIT_WORK_DIR + '/.git/')
-        jenkins.create_job(branch, job_config)
-        jenkins.trigger_build(branch)
+    if TRACE:
+      print '[JENKINS] add jobs:' + repr(new_jobs)
+    jobs_and_configs = map(
+        lambda job: (job, config_template.replace('remotes/origin/master', job).replace(config.GIT_REMOTE_PATH,
+                                                                                        'file://' + config.GIT_WORK_DIR + '/.git/'))
+        , new_jobs)
+    jenkins.create_jobs(jobs_and_configs)
+    jenkins.trigger_build_jobs(new_jobs)
 
 
 def jenkins_delete_jobs():
@@ -130,41 +133,71 @@ def jenkins_delete_jobs():
     branches = set([i[0] for i in dbcon.execute(
         '''select branch from branch;''').fetchall()])
     for branch in jobs.difference(branches):
+        if TRACE:
+            print '[JENKINS] delete job:' + repr(branch)
         jenkins.delete_job(branch)
 
 
 def jenkins_get_jobs_result():
-    current_jobs = set([i['name'] for i in jenkins.get_jobs() if (i['color'] in ['red', 'blue', 'yellow'])])
-    matched_jobs = filter(lambda job: re.match(config.branch_name_regexp, job), current_jobs)
-    for branch in matched_jobs:
-        result = jenkins.get_job_result(branch).splitlines()
-        ##TODO fix this bad code
-        if len(result) > 8 and result[-1].find('Finished:') >= 0:
-            jenkins_status = result[-1].split(':')[1].strip()
-            if not 'ERROR: Nothing to do' in result:
-                x = result[7].split()
-                if 'Revision' in x:
-                    index = x.index('Revision')
-                    jenkins_branch_head = x[index+1]
-                else:
-                    jenkins_branch_head = 'UNKNOWN'
-            else:
-                jenkins_branch_head = 'UNKNOWN'
-#            print branch, jenkins_status, jenkins_branch_head
-            if jenkins_status and jenkins_branch_head:
-                dbcon.execute(
-                    '''update branch set jenkins_status=?, jenkins_branch_head=?, jenkins_last_update_time=? where branch=?;'''
-                    , (jenkins_status, jenkins_branch_head, int(time.time()), branch))
+    import time
+
+    def _get(result):
+        l = []
+        for job in result['jobs']:
+            try:
+                name = job['name']
+            except:
+                name = None
+            try:
+                status = job['lastBuild']['result']
+            except:
+                status = None
+            try:
+                jenkins_head = job['lastBuild']['actions'][1]['lastBuiltRevision']['SHA1']
+            except:
+                jenkins_head = None
+            l.append({'name': name, 'status': status, 'jenkins_head': jenkins_head})
+        return l
+
+    result = jenkins.get_all(depth=2)
+    matched_jobs = [(i['status'], i['jenkins_head'], int(time.time()), i['name'])
+        for i in _get(result) if re.match(config.branch_name_regexp, i['name'])]
+    if TRACE:
+            print '[JENKINS] get job  results for: ' + str(len(matched_jobs)) + ' jobs'
+    dbcon.executemany(
+        '''update branch set jenkins_status=?, jenkins_branch_head=?, jenkins_last_update_time=?
+        where branch=?;''', (matched_jobs))
+
+
+def jenkins_rebuild_obsolete(limit=10):
+    current_jobs = set([i['name'] for i in jenkins.get_jobs() if
+        (re.match(config.branch_name_regexp, i['name']) and i['color'] == 'blue')])
+    obsolete_jobs = set([i[0] for i in dbcon.execute(
+        '''select branch from branch where not (git_merged_branch_head is jenkins_branch_head);''').fetchall()])
+    jobs_to_rebild = list(current_jobs.intersection(obsolete_jobs))
+    if TRACE:
+        print "[JENKINS]: Rebuild obsolete jobs: " + repr(len(jobs_to_rebild))
+    jenkins.trigger_build_jobs(jobs_to_rebild)
+
+
+def jenkins_rebuild_failed_all():
+    failed_jobs = [i['name'] for i in jenkins.get_jobs() if
+        (re.match(config.branch_name_regexp, i['name']) and i['color'] != 'blue')]
+    if TRACE:
+        print "[JENKINS]: Rebuild failed jobs: " + repr(failed_jobs)
+    jenkins.trigger_build_jobs(failed_jobs)
 
 
 def jenkins_rebuild_failed_random():
     import random
 
     failed_jobs = [i['name'] for i in jenkins.get_jobs() if
-        (re.match(config.branch_name_regexp, i['name']) and i['color'] == 'red')]
+        (re.match(config.branch_name_regexp, i['name']) and i['color'] != 'blue')]
     if len(failed_jobs) > 0:
         random_job = failed_jobs[random.randint(0, len(failed_jobs) - 1)]
-        jenkins.trigger_build(random_job)
+        if TRACE:
+            print "[JENKINS]: Rebuild random failed job: " + repr(random_job)
+        jenkins.trigger_build_job(random_job)
 
 
 def init_db():
@@ -172,11 +205,12 @@ def init_db():
 
     global dbcon
     dbcon = sqlite3.connect(":memory:", check_same_thread=False, isolation_level=None)
+#    dbcon = sqlite3.connect("/dev/shm/123.sqlite3", check_same_thread=False, isolation_level=None)
     dbcon.row_factory = sqlite3.Row
     dbcon.execute('''create table branch (
                         branch text PRIMARY KEY DESC,
-
                         git_branch_head text,
+                        git_merged_branch_head text,
                         git_remote_branch_head text,
                         git_merge_status text,
                         git_sql_info text,
@@ -218,9 +252,9 @@ def init_scheduler():
     sched.configure({'daemonic': 'True'})
 
     @sched.interval_schedule(seconds=30)
-    def sched_git_update_heads():
+    def sched_git_update_remote_heads():
         if TRACE: print inspect.stack()[0][3]
-        git_update_heads()
+        git_update_remote_heads()
 
     @sched.interval_schedule(seconds=30)
     def sched_git_merge_updated():
@@ -261,6 +295,11 @@ def init_scheduler():
     def sched_jenkins_rebuild_failed_random():
         if TRACE: print inspect.stack()[0][3]
         jenkins_rebuild_failed_random()
+        
+    @sched.interval_schedule(seconds=120)
+    def sched_jenkins_rebuild_obsolete():
+        if TRACE: print inspect.stack()[0][3]
+        jenkins_rebuild_obsolete()
 
     sched.start()
 
@@ -269,12 +308,13 @@ if __name__ == '__main__':
     init_db()
     print('Please wait: cloning %s ...' % (config.GIT_REMOTE_PATH))
 #    git.clone()
-    git_update_heads()
+    git_update_remote_heads()
     print('Please wait: Initial branch merging ...')
     git_merge_updated(limit=10)
     print('Please wait: Initial jira task information upload ...')
     jira_get_statuses_resolutions_priorities()
-#    jira_update(all=True)
+    #    jira_update(all=True)
     jira_update(limit=10)
+    jenkins_rebuild_failed_all()
     init_scheduler()
     web_.init_web(dbcon, jira_priority_map)
