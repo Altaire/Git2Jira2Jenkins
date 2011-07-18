@@ -1,6 +1,7 @@
 Git + JIRA + Jenkins(Hudson) integration script
 
 Install:
+    pip install SUDS
     cd  /usr/local/
     git clone git@github.com:Altaire/Git2Jira2Jenkins.git
 

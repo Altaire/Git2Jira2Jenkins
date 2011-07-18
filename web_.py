@@ -54,8 +54,31 @@ def no_merge(dbcon):
 def get_statistics(dbcon):
     return dbcon.execute('''select jira_task_status, count(*) from branch group by jira_task_status;''').fetchall()
 
+
+def get_statistics_by_team(dbcon):
+    import teams
+    result = []
+    for team in teams.teams.keys():
+        result.extend(dbcon.execute('''select '%s', count(*) from branch where jira_task_assignee in %s;''' %(team, teams.teams[team])).fetchall())
+    return result
+
+
+def get_statistics_by_jira_task_priority(dbcon):
+    return dbcon.execute('''select jira_task_priority, count(*) from branch group by jira_task_priority;''').fetchall()
+
+
+def get_statistics_by_git_merge_status(dbcon):
+    return dbcon.execute('''select git_merge_status, count(*) from branch group by git_merge_status;''').fetchall()
+
+def get_statistics_by_jenkins_status(dbcon):
+    c= dbcon.execute('''select jenkins_status, count(*) from branch group by jenkins_status;''').fetchall()
+    print c
+    return c
+
 urls = ("/",    "Index",
-        '/txt', "Txt")
+        '/txt', "Txt",
+        '/(.*)', "All")
+
 
 class Index:
     def GET(self):
@@ -64,6 +87,10 @@ class Index:
         render = web.template.render('templates/')
         return render.index(
             get_statistics(dbcon),
+            get_statistics_by_team(dbcon),
+            get_statistics_by_jira_task_priority(dbcon),
+            get_statistics_by_git_merge_status(dbcon),
+            get_statistics_by_jenkins_status(dbcon),
             succ_merge_succ_build(dbcon),
             succ_merge_fail_build(dbcon),
             succ_merge_no_build(dbcon),
@@ -73,6 +100,43 @@ class Index:
 
 class Txt:
     def GET(self):
+        c = web.ctx.globals.dbcon.execute('''select * from branch;''').fetchall()
+        return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
+
+class All:
+    def GET(self, url):
+        print url
+        jira_task_statuses_ = web.ctx.globals.dbcon.execute('''select jira_task_status from branch group by jira_task_status;''').fetchall()
+        jira_task_statuses = [i for (i,) in jira_task_statuses_]
+        jira_task_priority_ = web.ctx.globals.dbcon.execute('''select jira_task_priority from branch group by jira_task_priority;''').fetchall()
+        jira_task_priority = [i for (i,) in jira_task_priority_]
+        git_merge_status_ = web.ctx.globals.dbcon.execute('''select git_merge_status from branch group by git_merge_status;''').fetchall()
+        git_merge_status = [i for (i,) in git_merge_status_]
+        jenkins_status_ = web.ctx.globals.dbcon.execute('''select jenkins_status from branch group by jenkins_status;''').fetchall()
+        jenkins_status = [i for (i,) in jenkins_status_]
+
+
+        if url in jira_task_statuses:
+            c = web.ctx.globals.dbcon.execute('''select * from branch where jira_task_status=?;''', (url,)).fetchall()
+            return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
+
+        if url in jira_task_priority:
+            c = web.ctx.globals.dbcon.execute('''select * from branch where jira_task_priority=?;''', (url,)).fetchall()
+            return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
+
+        if url in git_merge_status:
+            c = web.ctx.globals.dbcon.execute('''select * from branch where git_merge_status=?;''', (url,)).fetchall()
+            return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
+
+        if url in jenkins_status:
+            c = web.ctx.globals.dbcon.execute('''select * from branch where jenkins_status=?;''', (url,)).fetchall()
+            return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
+
+        import teams
+        if url in teams.teams.keys():
+            c = web.ctx.globals.dbcon.execute('''select * from branch where jira_task_assignee in %s;''' % (teams.teams[url],)).fetchall()
+            return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
+
         c = web.ctx.globals.dbcon.execute('''select * from branch;''').fetchall()
         return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
 

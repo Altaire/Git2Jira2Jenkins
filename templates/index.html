@@ -1,4 +1,4 @@
-$def with(statistics, succ_merge_succ_build, succ_merge_fail_build, succ_merge_no_build, fail_merge, no_merge, jira_priority_map)
+$def with(status_statistics, team_statistics, jira_task_priority_stat, git_merge_status_stat, jenkins_status_stat, succ_merge_succ_build, succ_merge_fail_build, succ_merge_no_build, fail_merge, no_merge, jira_priority_map)
 <html>
 <head>
     <title>Git branch status</title>
@@ -8,10 +8,44 @@ $def with(statistics, succ_merge_succ_build, succ_merge_fail_build, succ_merge_n
 
 <body>
 
-<a>Статистика:</a><br/>
-    $for stat in statistics:
-        <a>$stat['jira_task_status']: $stat['count(*)']</a><br/>
+<table>
+    <tr>
+        <td><a>Статусы задач:</a><br/>
+            $for stat in status_statistics:
+            &nbsp;&nbsp;<a href="/$stat['jira_task_status']">$stat['jira_task_status']:&nbsp;</a><a>$stat['count(*)']</a><br/>
+        </td>
+        <br/>
+
+
+        <td><a>Приоритеты задач:</a><br/>
+            $for stat in jira_task_priority_stat:
+            &nbsp;&nbsp;<a href="/$stat['jira_task_priority']">$stat['jira_task_priority']:&nbsp;</a><a>$stat['count(*)']</a><br/>
+        </td>
+        <br/>
+
+        <td><a>Git:</a><br/>
+            $for stat in git_merge_status_stat:
+            &nbsp;&nbsp;<a href="/$stat['git_merge_status']">$stat['git_merge_status']:&nbsp;</a><a>$stat['count(*)']</a><br/>
+        </td>
+        <br/>
+
+        <td><a>Jenkins:</a><br/>
+            $for stat in jenkins_status_stat:
+            &nbsp;&nbsp;<a href="/$stat['jenkins_status']">$stat['jenkins_status']:&nbsp;</a><a>$stat['count(*)']</a><br/>
+        </td>
+        <br/>
+
+        <td><a>Команды:</a><br/>
+            $for (team,count) in team_statistics:
+            &nbsp;&nbsp;<a href="/$team">$team:&nbsp;</a><a>$count</a>
+        </td>
+        <br/>
+    </tr>
+</table>
+
+
 <br/>
+
 
 <a>Мерджится с мастером и собирается: $len(succ_merge_succ_build)</a>
 <table>

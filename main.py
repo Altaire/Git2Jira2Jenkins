@@ -1,11 +1,12 @@
-import multiprocessing, logging, re, time, config, git, jenkins, web_
+# -*- coding: utf-8
+import logging, re, time, config, git, jenkins, web_
 
 try:
-    import SOAPpy
+    from suds.client import Client
 except:
     import sys
 
-    print "Please do (for Ubuntu):\n\tsudo apt-get install python-soappy \nEXIT"
+    print "Please do (for Ubuntu):\n\tsudo pip install SUDS \nEXIT"
     sys.exit()
 
 TRACE = True
@@ -49,7 +50,7 @@ def git_delete_removed():
     dbcon.executemany('''delete from branch where branch=?;''', map(lambda x: (x,), diff))
 
 
-def git_merge_updated(limit=100):
+def git_merge_updated(limit=10):
     remote_branches, local_branches = git.get_remote_and_local_branches()
     q = dbcon.execute(
         '''select branch from branch where not git_remote_branch_head is git_branch_head limit %s;''' % (limit)).fetchall()
@@ -58,7 +59,7 @@ def git_merge_updated(limit=100):
 
 
 def _jira_update_task(soap, auth, jira_task_id):
-    task = soap.getIssue(auth, jira_task_id)
+    task = soap.service.getIssue(auth, jira_task_id)
     dbcon.execute('''update branch set
 						jira_task_priority=?,
 						jira_task_status=?,
@@ -77,10 +78,7 @@ def _jira_update_task(soap, auth, jira_task_id):
         jira_task_id
         ))
 
-
-def jira_update(all=False, limit=50):
-    soap = SOAPpy.WSDL.Proxy(config.JIRA_SOAP_SERVER)
-    auth = soap.login(config.JIRA_USER, config.JIRA_PASSWORD)
+def jira_update(all=False, limit=30):
     if all:
         q = dbcon.execute('''select DISTINCT branch from branch;''')
     else:
@@ -91,24 +89,30 @@ def jira_update(all=False, limit=50):
 
     ##TODO: update jira to 4.x. Jira 3.x does not support soap.getIssuesFromJqlSearch(), sorry. Cannot update by jira task 'updated' jql field
     tasks = set([task for (task, branch) in tasks_and_branches])
-    for jira_task_id in tasks:
-        _jira_update_task(soap, auth, jira_task_id)
-    soap.logout()
+    if tasks:
+        soap = Client(config.JIRA_SOAP_SERVER)
+        auth = soap.service.login(config.JIRA_USER, config.JIRA_PASSWORD)
+        for jira_task_id in tasks:
+            _jira_update_task(soap, auth, jira_task_id)
+        soap.service.logout()
 
 
 def jira_get_statuses_resolutions_priorities():
-    soap = SOAPpy.WSDL.Proxy(config.JIRA_SOAP_SERVER)
-    auth = soap.login(config.JIRA_USER, config.JIRA_PASSWORD)
-    for i in soap.getStatuses(auth):
-        jira_status_map[i['id']] = i['name']
-        jira_status_map[i['name'] + '_icon'] = i['icon']
-    for i in soap.getResolutions(auth):
-        jira_resolution_map[i['id']] = i['name']
-        jira_resolution_map[i['name'] + '_icon'] = i['icon']
-    for i in soap.getPriorities(auth):
-        jira_priority_map[i['id']] = i['name']
-        jira_priority_map[i['name'] + '_icon'] = i['icon']
-    soap.logout()
+    soap = Client(config.JIRA_SOAP_SERVER)
+    auth = soap.service.login(config.JIRA_USER, config.JIRA_PASSWORD)
+    for i in soap.service.getStatuses(auth):
+        if i['id'] != None and i['name'] != None:
+            jira_status_map[i['id']] = i['name']
+            jira_status_map[i['name'] + '_icon'] = i['icon']
+    for i in soap.service.getResolutions(auth):
+        if i['id'] != None and i['name'] != None:
+            jira_resolution_map[i['id']] = i['name']
+            jira_resolution_map[i['name'] + '_icon'] = i['icon']
+    for i in soap.service.getPriorities(auth):
+        if i['id'] != None and i['name'] != None:
+            jira_priority_map[i['id']] = i['name']
+            jira_priority_map[i['name'] + '_icon'] = i['icon']
+    soap.service.logout()
 
 
 def jenkins_add_jobs(limit=10):
@@ -116,22 +120,23 @@ def jenkins_add_jobs(limit=10):
     branches_to_build = set([i[0] for i in dbcon.execute(
         '''select branch from branch where jira_task_status='Need testing' and git_merge_status='MERGED'
         and not git_branch_head is jenkins_branch_head;''').fetchall()])
-    config_template = jenkins.get_config()
     new_jobs = list(branches_to_build.difference(current_jobs))[:limit]
     if TRACE:
       print '[JENKINS] add jobs:' + repr(new_jobs)
-    jobs_and_configs = map(
-        lambda job: (job, config_template.replace('remotes/origin/master', job).replace(config.GIT_REMOTE_PATH,
+    if new_jobs:
+        config_template = jenkins.get_config()
+        jobs_and_configs = map(
+            lambda job: (job, config_template.replace('remotes/origin/master', job).replace(config.GIT_REMOTE_PATH,
                                                                                         'file://' + config.GIT_WORK_DIR + '/.git/'))
-        , new_jobs)
-    jenkins.create_jobs(jobs_and_configs)
-    jenkins.trigger_build_jobs(new_jobs)
+            , new_jobs)
+        jenkins.create_jobs(jobs_and_configs)
+        jenkins.trigger_build_jobs(new_jobs)
 
 
 def jenkins_delete_jobs():
     jobs = set([i['name'] for i in jenkins.get_jobs() if re.match(config.branch_name_regexp, i['name'])])
     branches = set([i[0] for i in dbcon.execute(
-        '''select branch from branch;''').fetchall()])
+        '''select branch from branch where jira_task_status='Need testing';''').fetchall()])
     for branch in jobs.difference(branches):
         if TRACE:
             print '[JENKINS] delete job:' + repr(branch)
@@ -169,12 +174,14 @@ def jenkins_get_jobs_result():
         where branch=?;''', (matched_jobs))
 
 
-def jenkins_rebuild_obsolete(limit=10):
+def jenkins_rebuild_obsolete(limit=5):
     current_jobs = set([i['name'] for i in jenkins.get_jobs() if
         (re.match(config.branch_name_regexp, i['name']) and i['color'] == 'blue')])
     obsolete_jobs = set([i[0] for i in dbcon.execute(
-        '''select branch from branch where not (git_merged_branch_head is jenkins_branch_head);''').fetchall()])
-    jobs_to_rebild = list(current_jobs.intersection(obsolete_jobs))
+        '''select branch from branch where jira_task_status='Need testing' and 
+            not (git_merged_branch_head is jenkins_branch_head)
+            order by jira_task_priority;''').fetchall()])
+    jobs_to_rebild = list(obsolete_jobs.intersection(current_jobs))[:limit]
     if TRACE:
         print "[JENKINS]: Rebuild obsolete jobs: " + repr(len(jobs_to_rebild))
     jenkins.trigger_build_jobs(jobs_to_rebild)
@@ -256,25 +263,41 @@ def init_scheduler():
         if TRACE: print inspect.stack()[0][3]
         git_update_remote_heads()
 
+
     @sched.interval_schedule(seconds=30)
     def sched_git_merge_updated():
         if TRACE: print inspect.stack()[0][3]
         git_merge_updated()
 
-    @sched.interval_schedule(seconds=300)
-    def sched_git_delete_removed():
-        if TRACE: print inspect.stack()[0][3]
-        git_delete_removed()
+#    @sched.interval_schedule(seconds=300)
+#    def sched_git_delete_removed():
+#        if TRACE: print inspect.stack()[0][3]
+#        git_delete_removed()
 
     @sched.interval_schedule(seconds=300)
     def sched_jira_update_all():
         if TRACE: print inspect.stack()[0][3]
         jira_update(all=True)
 
-    @sched.interval_schedule(seconds=30)
+    @sched.interval_schedule(seconds=10)
     def sched_jira_update():
-        if TRACE: print inspect.stack()[0][3]
+        if TRACE:
+            print inspect.stack()[0][3]
+#            import utils.memory
+#            print utils.memory.stacksize()
+#            print utils.memory.memory()
+#            print utils.memory.resident()
+#            import utils.reflect
+#            utils.reflect.reflect()
         jira_update()
+#        if TRACE:
+#            print inspect.stack()[0][3]
+#            import utils.memory
+#            print utils.memory.stacksize()
+#            print utils.memory.memory()
+#            print utils.memory.resident()
+#            import utils.reflect
+#            utils.reflect.reflect()
 
     @sched.interval_schedule(seconds=3600)
     def sched_jira_get_statuses_resolutions_priorities():
@@ -291,15 +314,20 @@ def init_scheduler():
         if TRACE: print inspect.stack()[0][3]
         jenkins_get_jobs_result()
 
-    @sched.interval_schedule(seconds=300)
+    @sched.interval_schedule(seconds=180)
     def sched_jenkins_rebuild_failed_random():
         if TRACE: print inspect.stack()[0][3]
         jenkins_rebuild_failed_random()
         
-    @sched.interval_schedule(seconds=120)
+    @sched.interval_schedule(seconds=60)
     def sched_jenkins_rebuild_obsolete():
         if TRACE: print inspect.stack()[0][3]
         jenkins_rebuild_obsolete()
+
+    @sched.interval_schedule(seconds=120)
+    def sched_jenkins_delete_jobs():
+        if TRACE: print inspect.stack()[0][3]
+        jenkins_delete_jobs()
 
     sched.start()
 
@@ -315,6 +343,6 @@ if __name__ == '__main__':
     jira_get_statuses_resolutions_priorities()
     #    jira_update(all=True)
     jira_update(limit=10)
-    jenkins_rebuild_failed_all()
+#    jenkins_rebuild_failed_all()
     init_scheduler()
     web_.init_web(dbcon, jira_priority_map)
