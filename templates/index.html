@@ -47,7 +47,7 @@ $def with(status_statistics, team_statistics, jira_task_priority_stat, git_merge
 <br/>
 
 
-<a>Мерджится с мастером и собирается: $len(succ_merge_succ_build)</a>
+<a>Смерджились и собрались: $len(succ_merge_succ_build)</a>
 <table>
     $for branch in succ_merge_succ_build:
     <tr>
@@ -61,7 +61,7 @@ $def with(status_statistics, team_statistics, jira_task_priority_stat, git_merge
 </table>
 <br/>
 
-<a>Мерджится с мастером и не собирается: $len(succ_merge_fail_build)</a>
+<a>Смерджились и не собирались: $len(succ_merge_fail_build)</a>
 <table>
     $for branch in succ_merge_fail_build:
     <tr>
@@ -76,7 +76,7 @@ $def with(status_statistics, team_statistics, jira_task_priority_stat, git_merge
 <br/>
 
 
-<a>Не мерджится с мастером: $len(fail_merge)</a>
+<a>Не смерджились: $len(fail_merge)</a>
 <table>
     $for branch in fail_merge:
     <tr>
@@ -92,7 +92,7 @@ $def with(status_statistics, team_statistics, jira_task_priority_stat, git_merge
 <br/>
 
 
-<a>Мерджится с мастером, еще не собиралось: $len(succ_merge_no_build) </a>
+<a>Смерджились, еще не собирались: $len(succ_merge_no_build) </a>
 <table>
     $for branch in succ_merge_no_build:
     <tr>
@@ -106,7 +106,7 @@ $def with(status_statistics, team_statistics, jira_task_priority_stat, git_merge
 </table>
 <br/>
 
-<a>Еще не мерджилось: $len(no_merge)</a>
+<a>Еще не мерджились: $len(no_merge)</a>
 <table>
     $for branch in no_merge:
     <tr>
