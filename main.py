@@ -290,14 +290,6 @@ def init_scheduler():
 #            import utils.reflect
 #            utils.reflect.reflect()
         jira_update()
-#        if TRACE:
-#            print inspect.stack()[0][3]
-#            import utils.memory
-#            print utils.memory.stacksize()
-#            print utils.memory.memory()
-#            print utils.memory.resident()
-#            import utils.reflect
-#            utils.reflect.reflect()
 
     @sched.interval_schedule(seconds=3600)
     def sched_jira_get_statuses_resolutions_priorities():

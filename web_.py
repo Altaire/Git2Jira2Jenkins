@@ -70,10 +70,10 @@ def get_statistics_by_jira_task_priority(dbcon):
 def get_statistics_by_git_merge_status(dbcon):
     return dbcon.execute('''select git_merge_status, count(*) from branch group by git_merge_status;''').fetchall()
 
+
 def get_statistics_by_jenkins_status(dbcon):
-    c= dbcon.execute('''select jenkins_status, count(*) from branch group by jenkins_status;''').fetchall()
-    print c
-    return c
+    return dbcon.execute('''select jenkins_status, count(*) from branch group by jenkins_status;''').fetchall()
+
 
 urls = ("/",    "Index",
         '/txt', "Txt",
@@ -105,40 +105,33 @@ class Txt:
 
 class All:
     def GET(self, url):
+        import teams
         print url
-        jira_task_statuses_ = web.ctx.globals.dbcon.execute('''select jira_task_status from branch group by jira_task_status;''').fetchall()
+        dbcon = web.ctx.globals.dbcon
+
+        jira_task_statuses_ = dbcon.execute('''select jira_task_status from branch group by jira_task_status;''').fetchall()
         jira_task_statuses = [i for (i,) in jira_task_statuses_]
-        jira_task_priority_ = web.ctx.globals.dbcon.execute('''select jira_task_priority from branch group by jira_task_priority;''').fetchall()
+        jira_task_priority_ = dbcon.execute('''select jira_task_priority from branch group by jira_task_priority;''').fetchall()
         jira_task_priority = [i for (i,) in jira_task_priority_]
-        git_merge_status_ = web.ctx.globals.dbcon.execute('''select git_merge_status from branch group by git_merge_status;''').fetchall()
+        git_merge_status_ = dbcon.execute('''select git_merge_status from branch group by git_merge_status;''').fetchall()
         git_merge_status = [i for (i,) in git_merge_status_]
-        jenkins_status_ = web.ctx.globals.dbcon.execute('''select jenkins_status from branch group by jenkins_status;''').fetchall()
+        jenkins_status_ = dbcon.execute('''select jenkins_status from branch group by jenkins_status;''').fetchall()
         jenkins_status = [i for (i,) in jenkins_status_]
 
-
         if url in jira_task_statuses:
-            c = web.ctx.globals.dbcon.execute('''select * from branch where jira_task_status=?;''', (url,)).fetchall()
-            return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
-
-        if url in jira_task_priority:
-            c = web.ctx.globals.dbcon.execute('''select * from branch where jira_task_priority=?;''', (url,)).fetchall()
-            return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
-
-        if url in git_merge_status:
-            c = web.ctx.globals.dbcon.execute('''select * from branch where git_merge_status=?;''', (url,)).fetchall()
-            return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
-
-        if url in jenkins_status:
-            c = web.ctx.globals.dbcon.execute('''select * from branch where jenkins_status=?;''', (url,)).fetchall()
-            return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
-
-        import teams
-        if url in teams.teams.keys():
-            c = web.ctx.globals.dbcon.execute('''select * from branch where jira_task_assignee in %s;''' % (teams.teams[url],)).fetchall()
-            return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
-
-        c = web.ctx.globals.dbcon.execute('''select * from branch;''').fetchall()
-        return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
+            c = dbcon.execute('''select * from branch where jira_task_status=? order by jira_task_priority;''', (url,)).fetchall()
+        elif url in jira_task_priority:
+            c = dbcon.execute('''select * from branch where jira_task_priority=? order by jira_task_priority;''', (url,)).fetchall()
+        elif url in git_merge_status:
+            c = dbcon.execute('''select * from branch where git_merge_status=? order by jira_task_priority;''', (url,)).fetchall()
+        elif url in jenkins_status:
+            c = dbcon.execute('''select * from branch where jenkins_status=? order by jira_task_priority;''', (url,)).fetchall()
+        elif url in teams.teams.keys():
+            c = dbcon.execute('''select * from branch where jira_task_assignee in %s order by jira_task_priority;''' % (teams.teams[url],)).fetchall()
+        else:
+            c = dbcon.execute('''select * from branch;''').fetchall()
+        render = web.template.render('templates/')
+        return render.general(c, web.ctx.globals.jira_priority_map)
 
 
 def add_global_hoSUCCESS(glob):

@@ -1,0 +1,25 @@
+$def with(result, jira_priority_map)
+<html>
+<head>
+    <title>Git branch status</title>
+    <link rel="stylesheet" type="text/css" href="/static/smoothtaste.css"/>
+    <link rel="stylesheet" type="text/css" href="/static/main.css"/>
+</head>
+<body>
+
+<table>
+    $for branch in result:
+    <tr>
+        <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
+        <td>$branch['git_merge_status']</td>
+        <td>$branch['jenkins_status']</td>
+        <td>$branch['jira_task_priority']</td>
+        <td>$branch['jira_task_status']</td>
+        <td>$branch['jira_task_assignee']</td>
+        <td>$branch['jira_task_summary']</td>
+    </tr>
+</table>
+<br/>
+
+</body>
+</html>

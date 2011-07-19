@@ -10,14 +10,14 @@ $def with(status_statistics, team_statistics, jira_task_priority_stat, git_merge
 
 <table>
     <tr>
-        <td><a>Статусы задач:</a><br/>
+        <td><a>Статусы:</a><br/>
             $for stat in status_statistics:
             &nbsp;&nbsp;<a href="/$stat['jira_task_status']">$stat['jira_task_status']:&nbsp;</a><a>$stat['count(*)']</a><br/>
         </td>
         <br/>
 
 
-        <td><a>Приоритеты задач:</a><br/>
+        <td><a>Приоритеты:</a><br/>
             $for stat in jira_task_priority_stat:
             &nbsp;&nbsp;<a href="/$stat['jira_task_priority']">$stat['jira_task_priority']:&nbsp;</a><a>$stat['count(*)']</a><br/>
         </td>
@@ -80,7 +80,7 @@ $def with(status_statistics, team_statistics, jira_task_priority_stat, git_merge
 <table>
     $for branch in fail_merge:
     <tr>
-        <td><input type="checkbox"/></td>
+        <!--<td><input type="checkbox"/></td>-->
         <td><a href="http://jira.hh.ru/browse/$branch['jira_task_id']">$branch['branch']</a></td>
         <td>
             <img src="$jira_priority_map[branch['jira_task_priority'] + '_icon']" alt="$branch['jira_task_priority']"
