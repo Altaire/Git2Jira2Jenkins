@@ -31,7 +31,8 @@ def clone():
     os.makedirs(config.GIT_WORK_DIR)
     status, out, err = cmd(['git', 'clone', config.GIT_REMOTE_PATH, config.GIT_WORK_DIR])
     if status:
-        logging.error('[GIT] Cannot do action: ' + str(args) + "\n EXIT")
+        import sys
+        logging.error('[GIT] Cannot do action: clone' + "\n EXIT")
         sys.exit()
 
 def fetch():

@@ -23,15 +23,16 @@ def _git_merge(branch, local_branches):
     if branch in local_branches:
         git.remove_branch(branch)
     git.checkout(branch)
+    git_master_branch_head = git.get_head('remotes/origin/master')
     git_branch_head = git.get_head(branch)
     git_merge_status = git.merge()
     git_merged_branch_head = git.get_head(branch)
     #sql_info, bsh_info, config_info = git.get_diff()
     git_sql_info, git_bsh_info, git_config_info = None, None, None
     dbcon.execute(
-        '''update branch set git_branch_head=?, git_merged_branch_head=?, git_merge_status=?, git_sql_info=?, git_bsh_info=?, git_config_info=?, git_last_update_time=? where branch=?;'''
+        '''update branch set git_master_branch_head=?, git_branch_head=?, git_merged_branch_head=?, git_merge_status=?, git_sql_info=?, git_bsh_info=?, git_config_info=?, git_last_update_time=? where branch=?;'''
         ,
-        (git_branch_head, git_merged_branch_head, git_merge_status, git_sql_info, git_bsh_info, git_config_info, int(time.time()), branch))
+        (git_master_branch_head, git_branch_head, git_merged_branch_head, git_merge_status, git_sql_info, git_bsh_info, git_config_info, int(time.time()), branch))
 
 
 def git_update_remote_heads():
@@ -52,8 +53,10 @@ def git_delete_removed():
 
 def git_merge_updated(limit=10):
     remote_branches, local_branches = git.get_remote_and_local_branches()
+    git_master_branch_head = git.get_head('remotes/origin/master')
     q = dbcon.execute(
-        '''select branch from branch where not git_remote_branch_head is git_branch_head limit %s;''' % (limit)).fetchall()
+        '''select branch from branch where not (git_remote_branch_head is git_branch_head) or
+         not (git_master_branch_head is '%s') limit %s;''' % (git_master_branch_head, limit)).fetchall()
     for (branch,) in q:
         _git_merge(branch, local_branches)
 
@@ -216,9 +219,13 @@ def init_db():
     dbcon.row_factory = sqlite3.Row
     dbcon.execute('''create table branch (
                         branch text PRIMARY KEY DESC,
+
+                        git_master_branch_head text,
+                        git_remote_branch_head text,
                         git_branch_head text,
                         git_merged_branch_head text,
-                        git_remote_branch_head text,
+                        jenkins_branch_head text,
+                        
                         git_merge_status text,
                         git_sql_info text,
                         git_bsh_info text,
@@ -236,7 +243,6 @@ def init_db():
                         jira_last_update_time text,
 
                         jenkins_status text,
-                        jenkins_branch_head text,
                         jenkins_last_update_time text,
 
                         selenium_status text,
@@ -327,14 +333,12 @@ def init_scheduler():
 if __name__ == '__main__':
     init_db()
     print('Please wait: cloning %s ...' % (config.GIT_REMOTE_PATH))
-#    git.clone()
+    git.clone()
     git_update_remote_heads()
     print('Please wait: Initial branch merging ...')
     git_merge_updated(limit=10)
     print('Please wait: Initial jira task information upload ...')
     jira_get_statuses_resolutions_priorities()
-    #    jira_update(all=True)
     jira_update(limit=10)
-#    jenkins_rebuild_failed_all()
     init_scheduler()
     web_.init_web(dbcon, jira_priority_map)
