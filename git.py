@@ -13,15 +13,15 @@ TRACE = False
 lock = threading.Lock()
 
 #TODO: non-blocking io with timeout
-def __subprocess(args, timeout=100):
+def __subprocess(args, timeout):
     out, status = pexpect.run('git ' + ' '.join(args), cwd=config.GIT_WORK_DIR, timeout=timeout, withexitstatus=1)
     if status is not 0:
         return True, out, ''
     return False, out, ''
 
-def cmd(args, print_err=True, timeout=1):
+def cmd(args, print_err=True, timeout=100):
     logging.debug('[GIT] Action: ' + str(args))
-    status, out, err = __subprocess(args)
+    status, out, err = __subprocess(args, timeout)
     if status and print_err:
         logging.warning('[GIT] Cannot do action: ' + str(args))
         logging.warning("%s" % (out))
