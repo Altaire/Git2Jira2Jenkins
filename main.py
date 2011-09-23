@@ -279,57 +279,57 @@ def init_scheduler():
         if TRACE: print inspect.stack()[0][3]
         git_merge_updated()
 
-#    @sched.interval_schedule(seconds=300)
-#    def sched_git_delete_removed():
-#        if TRACE: print inspect.stack()[0][3]
-#        git_delete_removed()
+    @sched.interval_schedule(seconds=300)
+    def sched_git_delete_removed():
+        if TRACE: print inspect.stack()[0][3]
+        git_delete_removed()
 
-#    @sched.interval_schedule(seconds=300)
-#    def sched_jira_update_all():
-#        if TRACE: print inspect.stack()[0][3]
-#        jira_update(all=True)
+    @sched.interval_schedule(seconds=300)
+    def sched_jira_update_all():
+        if TRACE: print inspect.stack()[0][3]
+        jira_update(all=True)
 
-#    @sched.interval_schedule(seconds=10)
-#    def sched_jira_update():
-#        if TRACE:
-#            print inspect.stack()[0][3]
+    @sched.interval_schedule(seconds=10)
+    def sched_jira_update():
+        if TRACE:
+            print inspect.stack()[0][3]
 ##            import utils.memory
 ##            print utils.memory.stacksize()
 ##            print utils.memory.memory()
 ##            print utils.memory.resident()
 ##            import utils.reflect
 ##            utils.reflect.reflect()
-#        jira_update()
+        jira_update()
 
-#    @sched.interval_schedule(seconds=3600)
-#    def sched_jira_get_statuses_resolutions_priorities():
-#        if TRACE: print inspect.stack()[0][3]
-#        jira_get_statuses_resolutions_priorities()
-#
-#    @sched.interval_schedule(seconds=60)
-#    def sched_jenkins_add_jobs():
-#        if TRACE: print inspect.stack()[0][3]
-#        jenkins_add_jobs()
-#
-#    @sched.interval_schedule(seconds=60)
-#    def sched_jenkins_get_jobs_result():
-#        if TRACE: print inspect.stack()[0][3]
-#        jenkins_get_jobs_result()
-#
-#    @sched.interval_schedule(seconds=180)
-#    def sched_jenkins_rebuild_failed_random():
-#        if TRACE: print inspect.stack()[0][3]
-#        jenkins_rebuild_failed_random()
-#
-#    @sched.interval_schedule(seconds=60)
-#    def sched_jenkins_rebuild_obsolete():
-#        if TRACE: print inspect.stack()[0][3]
-#        jenkins_rebuild_obsolete()
-#
-#    @sched.interval_schedule(seconds=120)
-#    def sched_jenkins_delete_jobs():
-#        if TRACE: print inspect.stack()[0][3]
-#        jenkins_delete_jobs()
+    @sched.interval_schedule(seconds=3600)
+    def sched_jira_get_statuses_resolutions_priorities():
+        if TRACE: print inspect.stack()[0][3]
+        jira_get_statuses_resolutions_priorities()
+
+    @sched.interval_schedule(seconds=60)
+    def sched_jenkins_add_jobs():
+        if TRACE: print inspect.stack()[0][3]
+        jenkins_add_jobs()
+
+    @sched.interval_schedule(seconds=60)
+    def sched_jenkins_get_jobs_result():
+        if TRACE: print inspect.stack()[0][3]
+        jenkins_get_jobs_result()
+
+    @sched.interval_schedule(seconds=180)
+    def sched_jenkins_rebuild_failed_random():
+        if TRACE: print inspect.stack()[0][3]
+        jenkins_rebuild_failed_random()
+
+    @sched.interval_schedule(seconds=60)
+    def sched_jenkins_rebuild_obsolete():
+        if TRACE: print inspect.stack()[0][3]
+        jenkins_rebuild_obsolete()
+
+    @sched.interval_schedule(seconds=120)
+    def sched_jenkins_delete_jobs():
+        if TRACE: print inspect.stack()[0][3]
+        jenkins_delete_jobs()
 
     sched.start()
 
