@@ -14,7 +14,7 @@ def succ_merge_succ_build(dbcon):
         '''select * from branch where (git_remote_branch_head is git_branch_head) 
          and (git_merge_status is 'MERGED')
          and (jira_task_status is 'Need testing')
-         and (git_remote_branch_head is jenkins_branch_head)
+         and (git_merged_branch_head is jenkins_branch_head)
          and (jenkins_status is 'SUCCESS')
          order by jira_task_priority;''').fetchall()
 

@@ -9,6 +9,8 @@ except:
     print "Please do (for Ubuntu):\n\tsudo pip install SUDS \nEXIT"
     sys.exit()
 
+
+
 TRACE = True
 FORMAT = '%(asctime)-15s  %(levelname)s %(message)s  %(funcName)s %(lineno)s %(exc_info)s'
 logging.basicConfig(filename=config.LOG_FILENAME, level=logging.INFO, format=FORMAT)
@@ -222,6 +224,8 @@ def init_db():
 
                         git_master_branch_head text,
                         git_remote_branch_head text,
+
+
                         git_branch_head text,
                         git_merged_branch_head text,
                         jenkins_branch_head text,
@@ -280,59 +284,59 @@ def init_scheduler():
 #        if TRACE: print inspect.stack()[0][3]
 #        git_delete_removed()
 
-    @sched.interval_schedule(seconds=300)
-    def sched_jira_update_all():
-        if TRACE: print inspect.stack()[0][3]
-        jira_update(all=True)
+#    @sched.interval_schedule(seconds=300)
+#    def sched_jira_update_all():
+#        if TRACE: print inspect.stack()[0][3]
+#        jira_update(all=True)
 
-    @sched.interval_schedule(seconds=10)
-    def sched_jira_update():
-        if TRACE:
-            print inspect.stack()[0][3]
-#            import utils.memory
-#            print utils.memory.stacksize()
-#            print utils.memory.memory()
-#            print utils.memory.resident()
-#            import utils.reflect
-#            utils.reflect.reflect()
-        jira_update()
+#    @sched.interval_schedule(seconds=10)
+#    def sched_jira_update():
+#        if TRACE:
+#            print inspect.stack()[0][3]
+##            import utils.memory
+##            print utils.memory.stacksize()
+##            print utils.memory.memory()
+##            print utils.memory.resident()
+##            import utils.reflect
+##            utils.reflect.reflect()
+#        jira_update()
 
-    @sched.interval_schedule(seconds=3600)
-    def sched_jira_get_statuses_resolutions_priorities():
-        if TRACE: print inspect.stack()[0][3]
-        jira_get_statuses_resolutions_priorities()
-
-    @sched.interval_schedule(seconds=60)
-    def sched_jenkins_add_jobs():
-        if TRACE: print inspect.stack()[0][3]
-        jenkins_add_jobs()
-
-    @sched.interval_schedule(seconds=60)
-    def sched_jenkins_get_jobs_result():
-        if TRACE: print inspect.stack()[0][3]
-        jenkins_get_jobs_result()
-
-    @sched.interval_schedule(seconds=180)
-    def sched_jenkins_rebuild_failed_random():
-        if TRACE: print inspect.stack()[0][3]
-        jenkins_rebuild_failed_random()
-        
-    @sched.interval_schedule(seconds=60)
-    def sched_jenkins_rebuild_obsolete():
-        if TRACE: print inspect.stack()[0][3]
-        jenkins_rebuild_obsolete()
-
-    @sched.interval_schedule(seconds=120)
-    def sched_jenkins_delete_jobs():
-        if TRACE: print inspect.stack()[0][3]
-        jenkins_delete_jobs()
+#    @sched.interval_schedule(seconds=3600)
+#    def sched_jira_get_statuses_resolutions_priorities():
+#        if TRACE: print inspect.stack()[0][3]
+#        jira_get_statuses_resolutions_priorities()
+#
+#    @sched.interval_schedule(seconds=60)
+#    def sched_jenkins_add_jobs():
+#        if TRACE: print inspect.stack()[0][3]
+#        jenkins_add_jobs()
+#
+#    @sched.interval_schedule(seconds=60)
+#    def sched_jenkins_get_jobs_result():
+#        if TRACE: print inspect.stack()[0][3]
+#        jenkins_get_jobs_result()
+#
+#    @sched.interval_schedule(seconds=180)
+#    def sched_jenkins_rebuild_failed_random():
+#        if TRACE: print inspect.stack()[0][3]
+#        jenkins_rebuild_failed_random()
+#
+#    @sched.interval_schedule(seconds=60)
+#    def sched_jenkins_rebuild_obsolete():
+#        if TRACE: print inspect.stack()[0][3]
+#        jenkins_rebuild_obsolete()
+#
+#    @sched.interval_schedule(seconds=120)
+#    def sched_jenkins_delete_jobs():
+#        if TRACE: print inspect.stack()[0][3]
+#        jenkins_delete_jobs()
 
     sched.start()
 
 
 if __name__ == '__main__':
     init_db()
-    print('Please wait: cloning %s ...' % (config.GIT_REMOTE_PATH))
+    print('Please wait: cloning %s to %s ...' % (config.GIT_REMOTE_PATH, config.GIT_WORK_DIR))
     git.clone()
     git_update_remote_heads()
     print('Please wait: Initial branch merging ...')
