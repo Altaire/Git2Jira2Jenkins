@@ -13,8 +13,8 @@ TRACE = False
 lock = threading.Lock()
 
 #TODO: non-blocking io with timeout
-def __subprocess(args):
-    out, status = pexpect.run('git ' + ' '.join(args), cwd=config.GIT_WORK_DIR, timeout=100, withexitstatus=1)
+def __subprocess(args, timeout=100):
+    out, status = pexpect.run('git ' + ' '.join(args), cwd=config.GIT_WORK_DIR, timeout=timeout, withexitstatus=1)
     if status is not 0:
         return True, out, ''
     return False, out, ''
@@ -36,7 +36,7 @@ def clone():
         shutil.rmtree(config.GIT_WORK_DIR)
     os.makedirs(config.GIT_WORK_DIR)
     with lock:
-        status, out, err = cmd(['clone', config.GIT_REMOTE_PATH, config.GIT_WORK_DIR])
+        status, out, err = cmd(['clone', config.GIT_REMOTE_PATH, config.GIT_WORK_DIR], timeout=300)
     if status:
         import sys
         logging.error('[GIT] Cannot do action: clone' + "\n EXIT")
