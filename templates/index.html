@@ -29,7 +29,7 @@ $def with(status_statistics, team_statistics, jira_task_priority_stat, git_merge
         </td>
         <br/>
 
-        <td><a>Jenkins:</a><br/>
+        <td><a>Jenkins ('Need testing' only):</a><br/>
             $for stat in jenkins_status_stat:
             &nbsp;&nbsp;<a href="/$stat['jenkins_status']">$stat['jenkins_status']:&nbsp;</a><a>$stat['count(*)']</a><br/>
         </td>
