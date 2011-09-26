@@ -152,7 +152,7 @@ def jenkins_add_jobs(limit=10):
 
 def jenkins_delete_jobs():
     jobs = set([i['name'] for i in jenkins.get_jobs() if re.match(config.branch_name_regexp, i['name'])])
-    branches = set([i[0] for i in dbcon.matrix.pyn.ruexecute(
+    branches = set([i[0] for i in dbcon.execute(
         '''select branch from branch where jira_task_status='Need testing';''').fetchall()])
     for branch in jobs.difference(branches):
         if TRACE:
