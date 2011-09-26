@@ -11,42 +11,48 @@ except:
 
 def succ_merge_succ_build(dbcon):
     return dbcon.execute(
-        '''select * from branch where (git_remote_branch_head is git_branch_head) 
+        '''select * from branch where (git_master_head_remote is git_master_head_local_done)
+         and (git_remote_head_remote is git_remote_head_local_done)
          and (git_merge_status is 'MERGED')
          and (jira_task_status is 'Need testing')
-         and (git_merged_branch_head is jenkins_branch_head)
+         and (git_branch_head_merged is jenkins_branch_head_merged)
          and (jenkins_status is 'SUCCESS')
          order by jira_task_priority;''').fetchall()
 
 
 def succ_merge_fail_build(dbcon):
     return dbcon.execute(
-        '''select * from branch where (git_remote_branch_head is git_branch_head)
+        '''select * from branch where (git_master_head_remote is git_master_head_local_done)
+         and (git_remote_head_remote is git_remote_head_local_done)
          and (git_merge_status is 'MERGED')
          and (jira_task_status is 'Need testing')
+         and (git_branch_head_merged is jenkins_branch_head_merged)
          and ((jenkins_status is 'FAILED') or (jenkins_status is 'UNSTABLE'))
          order by jira_task_priority;''').fetchall()
 
 
 def succ_merge_no_build(dbcon):
     return dbcon.execute(
-        '''select * from branch where (git_remote_branch_head is git_branch_head)
+        '''select * from branch where (git_master_head_remote is git_master_head_local_done)
+        and (git_remote_head_remote is git_remote_head_local_done)
         and (git_merge_status is 'MERGED')
         and (jira_task_status is 'Need testing')
-        and not (git_remote_branch_head is jenkins_branch_head)
+        and not (git_master_head_remote is jenkins_branch_head_merged)
         order by jira_task_priority;''').fetchall()
 
 
 def fail_merge(dbcon):
     return dbcon.execute(
-        '''select * from branch where (git_remote_branch_head is git_branch_head)
+        '''select * from branch where (git_master_head_remote is git_master_head_local_done)
+        and (git_remote_head_remote is git_remote_head_local_done)
         and (jira_task_status is 'Need testing')
         and not (git_merge_status is 'MERGED')
         order by jira_task_priority;''').fetchall()
 
 
 def no_merge(dbcon):
-    return dbcon.execute('''select * from branch where not (git_remote_branch_head is git_branch_head)
+    return dbcon.execute('''select * from branch where (not (git_master_head_remote is git_master_head_local_done)
+    or not (git_remote_head_remote is git_remote_head_local_done))
     and (jira_task_status is 'Need testing')
     order by jira_task_priority;''').fetchall()
 
@@ -68,7 +74,7 @@ def get_statistics_by_jira_task_priority(dbcon):
 
 
 def get_statistics_by_git_merge_status(dbcon):
-    return dbcon.execute('''select git_merge_status, count(*) from branch group by git_merge_status;''').fetchall()
+    return dbcon.execute('''select git_merge_status, count(*) from branch where jira_task_status='Need testing' group by git_merge_status;''').fetchall()
 
 
 def get_statistics_by_jenkins_status(dbcon):
@@ -101,7 +107,7 @@ class Index:
 class Txt:
     def GET(self):
         c = web.ctx.globals.dbcon.execute('''select * from branch;''').fetchall()
-        return '\n'.join(map(lambda x: ' '.join(['None' if (x[i]==None) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
+        return '\n'.join(map(lambda x: ' '.join([str(x[i]) if (type(x[i])!=unicode) else str(x[i].encode('utf-8')) for i in x.keys()]), c))
 
 class All:
     def GET(self, url):

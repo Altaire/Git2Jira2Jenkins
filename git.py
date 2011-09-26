@@ -19,7 +19,7 @@ def __subprocess(args, timeout):
         return True, out, ''
     return False, out, ''
 
-def cmd(args, print_err=True, timeout=100):
+def cmd(args, print_err=True, timeout=5):
     logging.debug('[GIT] Action: ' + str(args))
     status, out, err = __subprocess(args, timeout)
     if status and print_err:
@@ -44,7 +44,7 @@ def clone():
 
 def fetch():
     with lock:
-        cmd(['git', 'fetch'], timeout=20)
+        cmd(['fetch'], timeout=20)
 
 def get_all_remote_branch_heads(branch_regexp=None):
     with lock:
@@ -55,7 +55,7 @@ def get_all_remote_branch_heads(branch_regexp=None):
 def get_remote_and_local_branches():
     with lock:
         status, out, err = cmd(['branch', '-r'])
-        remote_branches = [x.strip().lstrip("origin/") for x in out.splitlines() if re.match("origin/" + config.branch_name_regexp, x.strip())]
+        remote_branches = [x.strip().lstrip("origin/") for x in out.splitlines() if re.match(config.branch_name_regexp, x.strip().lstrip("origin/"))]
         status, out, err = cmd(['branch'])
         local_branches = [x.strip() for x in out.replace('*', '').splitlines() if (re.match(config.branch_name_regexp, x.strip()) and x.strip() != 'master')]
         return remote_branches, local_branches
@@ -64,7 +64,6 @@ def remove_branch(branch):
     with lock:
         cmd(['checkout', '-f', 'remotes/origin/master'])
         cmd(['branch', '-D', branch])
-
 
 def checkout(branch):
     with lock:
@@ -99,5 +98,9 @@ def get_diff():
 
 def get_head(branch):
     with lock:
-        status, out, err = cmd(['log', '-1', '--pretty=format:%H', branch])
-        return out
+        status, out, err = cmd(['log', '-1','--color=never', '--pretty=format:%H', branch])
+        return out.replace('\x1b[?1h\x1b=\r','').replace('\x1b[m\r\n\r\x1b[K\x1b[?1l\x1b>','')
+
+def get_status():
+    with lock:
+        cmd(['status'])

@@ -1,5 +1,5 @@
 # -*- coding: utf-8
-import logging, re, time, config, git, jenkins, web_
+import logging, re, time, datetime, config, git, jenkins, web_
 
 try:
     from suds.client import Client
@@ -25,40 +25,48 @@ def _git_merge(branch, local_branches):
     if branch in local_branches:
         git.remove_branch(branch)
     git.checkout(branch)
-    git_master_branch_head = git.get_head('remotes/origin/master')
-    git_branch_head = git.get_head(branch)
+    git_master_head_local_done = git.get_head('remotes/origin/master')
+    git_remote_head_local_done = git.get_head(branch)
+    git.get_status()
     git_merge_status = git.merge()
-    git_merged_branch_head = git.get_head(branch)
+    git_branch_head_merged = git.get_head(branch)
     #sql_info, bsh_info, config_info = git.get_diff()
     git_sql_info, git_bsh_info, git_config_info = None, None, None
     dbcon.execute(
-        '''update branch set git_master_branch_head=?, git_branch_head=?, git_merged_branch_head=?, git_merge_status=?, git_sql_info=?, git_bsh_info=?, git_config_info=?, git_last_update_time=? where branch=?;'''
+        '''update branch set git_master_head_local_done=?, git_remote_head_local_done=?, git_branch_head_merged=?, git_merge_status=?, git_sql_info=?, git_bsh_info=?, git_config_info=?, git_last_update_time=? where branch=?;'''
         ,
-        (git_master_branch_head, git_branch_head, git_merged_branch_head, git_merge_status, git_sql_info, git_bsh_info, git_config_info, int(time.time()), branch))
+        (git_master_head_local_done, git_remote_head_local_done, git_branch_head_merged, git_merge_status, git_sql_info, git_bsh_info, git_config_info, int(time.time()), branch))
 
 
 def git_update_remote_heads():
     git.fetch()
-    remote_branch_heads = git.get_all_remote_branch_heads(branch_regexp=config.branch_name_regexp)
-    dbcon.executemany("insert or ignore into branch(branch, git_remote_branch_head) values (?, ?);",
-                      remote_branch_heads)
-    dbcon.executemany("update branch set git_remote_branch_head=? where branch=?;",
-                      map(lambda (branch, head): (head, branch), remote_branch_heads))
 
+    remote_branch_heads = git.get_all_remote_branch_heads(branch_regexp=config.branch_name_regexp)
+    dbcon.executemany("insert or ignore into branch(branch, git_remote_head_remote) values (?, ?);", remote_branch_heads)
+    dbcon.executemany("update branch set git_remote_head_remote=? where branch=?;",
+                      map(lambda (branch, head): (head, branch), remote_branch_heads))
+    
+    git_master_head_remote = git.get_head('remotes/origin/master')
+    dbcon.execute('''update branch set git_master_head_remote=?;''',(git_master_head_remote,))
 
 def git_delete_removed():
     remote_branches, local_branches = git.get_remote_and_local_branches()
     branches = set([i[0] for i in dbcon.execute('''select branch from branch;''').fetchall()])
     diff = branches.difference(set(remote_branches))
+    if TRACE:
+        print "\n\n\n\nDELETE BRANCHES:"
+        print diff
     dbcon.executemany('''delete from branch where branch=?;''', map(lambda x: (x,), diff))
 
 
-def git_merge_updated(limit=10):
+def git_merge_updated(limit=15):
     remote_branches, local_branches = git.get_remote_and_local_branches()
-    git_master_branch_head = git.get_head('remotes/origin/master')
     q = dbcon.execute(
-        '''select branch from branch where not (git_remote_branch_head is git_branch_head) or
-         not (git_master_branch_head is '%s') limit %s;''' % (git_master_branch_head, limit)).fetchall()
+        '''select branch from branch where
+        ((not git_master_head_remote is git_master_head_local_done)
+        or (not git_remote_head_remote is git_remote_head_local_done))
+        and jira_task_status='Need testing'
+        limit %s;''' % (limit)).fetchall()
     for (branch,) in q:
         _git_merge(branch, local_branches)
 
@@ -83,12 +91,16 @@ def _jira_update_task(soap, auth, jira_task_id):
         jira_task_id
         ))
 
-def jira_update(all=False, limit=30):
-    if all:
-        q = dbcon.execute('''select DISTINCT branch from branch;''')
-    else:
+def jira_update(only_new=True, limit=60):
+    if only_new:
         q = dbcon.execute('''select DISTINCT branch from branch where jira_task_id is null limit %s;''' % (limit))
+    else:
+        q = dbcon.execute('''select DISTINCT branch from branch where jira_last_update_time<? limit ?;''', (int(time.time()) + 300, limit) )
     branches = [i[0] for i in q.fetchall()]
+    if TRACE:
+        print '\n\n\n OBSOLETE JIRA TASKS:'
+        print 'only_new: ' , only_new
+        print branches
     tasks_and_branches = [(re.match(config.jira_task_regexp, branch).group(), branch) for branch in branches]
     dbcon.executemany("update branch set jira_task_id=? where branch=?;", tasks_and_branches)
 
@@ -124,7 +136,7 @@ def jenkins_add_jobs(limit=10):
     current_jobs = set([i['name'] for i in jenkins.get_jobs()])
     branches_to_build = set([i[0] for i in dbcon.execute(
         '''select branch from branch where jira_task_status='Need testing' and git_merge_status='MERGED'
-        and not git_branch_head is jenkins_branch_head;''').fetchall()])
+        and not jenkins_branch_head_merged;''').fetchall()])
     new_jobs = list(branches_to_build.difference(current_jobs))[:limit]
     if TRACE:
       print '[JENKINS] add jobs:' + repr(new_jobs)
@@ -140,7 +152,7 @@ def jenkins_add_jobs(limit=10):
 
 def jenkins_delete_jobs():
     jobs = set([i['name'] for i in jenkins.get_jobs() if re.match(config.branch_name_regexp, i['name'])])
-    branches = set([i[0] for i in dbcon.execute(
+    branches = set([i[0] for i in dbcon.matrix.pyn.ruexecute(
         '''select branch from branch where jira_task_status='Need testing';''').fetchall()])
     for branch in jobs.difference(branches):
         if TRACE:
@@ -175,7 +187,7 @@ def jenkins_get_jobs_result():
     if TRACE:
             print '[JENKINS] get job  results for: ' + str(len(matched_jobs)) + ' jobs'
     dbcon.executemany(
-        '''update branch set jenkins_status=?, jenkins_branch_head=?, jenkins_last_update_time=?
+        '''update branch set jenkins_status=?, jenkins_branch_head_merged=?, jenkins_last_update_time=?
         where branch=?;''', (matched_jobs))
 
 
@@ -184,7 +196,7 @@ def jenkins_rebuild_obsolete(limit=5):
         (re.match(config.branch_name_regexp, i['name']) and i['color'] == 'blue')])
     obsolete_jobs = set([i[0] for i in dbcon.execute(
         '''select branch from branch where jira_task_status='Need testing' and 
-            not (git_merged_branch_head is jenkins_branch_head)
+            not (git_branch_head_merged is jenkins_branch_head_merged)
             order by jira_task_priority;''').fetchall()])
     jobs_to_rebild = list(obsolete_jobs.intersection(current_jobs))[:limit]
     if TRACE:
@@ -216,25 +228,25 @@ def init_db():
     import sqlite3
 
     global dbcon
-    dbcon = sqlite3.connect(":memory:", check_same_thread=False, isolation_level=None)
+    dbcon = sqlite3.connect(":memory:", check_same_thread=False, isolation_level=None,  detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
 #    dbcon = sqlite3.connect("/dev/shm/123.sqlite3", check_same_thread=False, isolation_level=None)
     dbcon.row_factory = sqlite3.Row
     dbcon.execute('''create table branch (
                         branch text PRIMARY KEY DESC,
 
-                        git_master_branch_head text,
-                        git_remote_branch_head text,
+                        git_master_head_remote text,
+                        git_master_head_local_done text,
+                        git_remote_head_remote text,
+                        git_remote_head_local_done text,
 
-
-                        git_branch_head text,
-                        git_merged_branch_head text,
-                        jenkins_branch_head text,
+                        git_branch_head_merged text,
+                        jenkins_branch_head_merged text,
                         
                         git_merge_status text,
                         git_sql_info text,
                         git_bsh_info text,
                         git_config_info text,
-                        git_last_update_time text,
+                        git_last_update_time INTEGER,
 
                         jira_task_id text,
                         jira_task_priority text,
@@ -244,10 +256,10 @@ def init_db():
                         jira_task_status text,
                         jira_task_assignee text,
                         jira_task_updated text,
-                        jira_last_update_time text,
+                        jira_last_update_time INTEGER,
 
                         jenkins_status text,
-                        jenkins_last_update_time text,
+                        jenkins_last_update_time INTEGER,
 
                         selenium_status text,
                         selenium_branch_head text,
@@ -268,7 +280,7 @@ def init_scheduler():
     sched = Scheduler()
     sched.configure({'daemonic': 'True'})
 
-    @sched.interval_schedule(seconds=30)
+    @sched.interval_schedule(seconds=60)
     def sched_git_update_remote_heads():
         if TRACE: print inspect.stack()[0][3]
         git_update_remote_heads()
@@ -279,27 +291,27 @@ def init_scheduler():
         if TRACE: print inspect.stack()[0][3]
         git_merge_updated()
 
-    @sched.interval_schedule(seconds=300)
+    @sched.interval_schedule(seconds=30)
     def sched_git_delete_removed():
         if TRACE: print inspect.stack()[0][3]
         git_delete_removed()
 
-    @sched.interval_schedule(seconds=300)
-    def sched_jira_update_all():
+    @sched.interval_schedule(seconds=60)
+    def sched_jira_update_obsolete():
         if TRACE: print inspect.stack()[0][3]
-        jira_update(all=True)
+        jira_update(only_new=False)
 
-    @sched.interval_schedule(seconds=10)
-    def sched_jira_update():
-        if TRACE:
-            print inspect.stack()[0][3]
+    @sched.interval_schedule(seconds=60)
+    def sched_jira_get_new():
+        if TRACE: print inspect.stack()[0][3]
+        jira_update(only_new=True)
+
 ##            import utils.memory
 ##            print utils.memory.stacksize()
 ##            print utils.memory.memory()
 ##            print utils.memory.resident()
 ##            import utils.reflect
 ##            utils.reflect.reflect()
-        jira_update()
 
     @sched.interval_schedule(seconds=3600)
     def sched_jira_get_statuses_resolutions_priorities():
@@ -336,11 +348,11 @@ def init_scheduler():
 
 if __name__ == '__main__':
     init_db()
-    print('Please wait: cloning %s to %s ...' % (config.GIT_REMOTE_PATH, config.GIT_WORK_DIR))
-    git.clone()
+#    print('Please wait: cloning %s to %s ...' % (config.GIT_REMOTE_PATH, config.GIT_WORK_DIR))
+#    git.clone()
     git_update_remote_heads()
     print('Please wait: Initial branch merging ...')
-    git_merge_updated(limit=10)
+    git_merge_updated(limit=5)
     print('Please wait: Initial jira task information upload ...')
     jira_get_statuses_resolutions_priorities()
     jira_update(limit=10)
