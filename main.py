@@ -11,7 +11,7 @@ except:
 
 
 
-TRACE = True
+TRACE = False
 FORMAT = '%(asctime)-15s  %(levelname)s %(message)s  %(funcName)s %(lineno)s %(exc_info)s'
 logging.basicConfig(filename=config.LOG_FILENAME, level=logging.INFO, format=FORMAT)
 
@@ -348,8 +348,8 @@ def init_scheduler():
 
 if __name__ == '__main__':
     init_db()
-#    print('Please wait: cloning %s to %s ...' % (config.GIT_REMOTE_PATH, config.GIT_WORK_DIR))
-#    git.clone()
+    print('Please wait: cloning %s to %s ...' % (config.GIT_REMOTE_PATH, config.GIT_WORK_DIR))
+    git.clone()
     git_update_remote_heads()
     print('Please wait: Initial branch merging ...')
     git_merge_updated(limit=5)
