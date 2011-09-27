@@ -5,24 +5,23 @@ TRACE = True
 def _e(s):
     return urllib.quote(s)
 
-
-def _urlopen(url, data=None):
-    import urllib2
-    url = config.JENKINS_SERVER + url
-    request = urllib2.Request(url, data)
-    base64string = base64.encodestring('%s:%s' % (config.JENKINS_LOGIN, config.JENKINS_PASSWORD)).replace('\n', '')
-    request.add_header("Authorization", "Basic %s" % base64string)
-    if data:
-        request.add_header("Content-Type", "text/xml")
-    if TRACE:
-        print '[JENKINS]: ' + request.get_full_url()
-    try:
-        response = urllib2.urlopen(request, timeout=10)
-        result = response.read()
-    except:
-        logging.warning('[JENKINS]: ' + request.get_full_url())
-        raise
-    return result
+#def _urlopen(url, data=None):
+#    import urllib2
+#    url = config.JENKINS_SERVER + url
+#    request = urllib2.Request(url, data)
+#    base64string = base64.encodestring('%s:%s' % (config.JENKINS_LOGIN, config.JENKINS_PASSWORD)).replace('\n', '')
+#    request.add_header("Authorization", "Basic %s" % base64string)
+#    if data:
+#        request.add_header("Content-Type", "text/xml")
+#    if TRACE:
+#        print '[JENKINS]: ' + request.get_full_url()
+#    try:
+#        response = urllib2.urlopen(request, timeout=10)
+#        result = response.read()
+#    except:
+#        logging.warning('[JENKINS]: ' + request.get_full_url())
+#        raise
+#    return result
 
 
 #[(url, data), ...]
@@ -37,7 +36,8 @@ def _urlopen_multi(urls_and_datas):
         handle = pycurl.Curl()
         handle.setopt(pycurl.URL, url)
         handle.setopt(pycurl.WRITEFUNCTION, response.write)
-        handle.setopt(pycurl.CONNECTTIMEOUT, 10)
+        handle.setopt(pycurl.CONNECTTIMEOUT, 2)
+        handle.setopt(pycurl.TIMEOUT, 10)
         base64string = base64.encodestring('%s:%s' % (config.JENKINS_LOGIN, config.JENKINS_PASSWORD)).replace('\n', '')
         headers = ['Authorization: ' + "Basic %s" % base64string]
         if data:
@@ -64,20 +64,28 @@ def _urlopen_multi(urls_and_datas):
             ret, num_handles = m.perform()
             if ret != pycurl.E_CALL_MULTI_PERFORM:
                 break
+    result = []
     for req in reqs:
-        print req[1].getvalue()
+        result.append(req[1].getvalue())
+#    if TRACE:
+#        print result
+    if len(result) == 1:
+        return result[0]
+    else:
+        return result
 
 
-def get_all(depth=0):
-    return eval(_urlopen('api/python?depth={0}'.format(depth)))
+def get_job_branch_sha1():
+    return eval(_urlopen_multi([('api/json?tree=jobs[name,lastBuild[result,actions[lastBuiltRevision[SHA1]]]]', None)]))['jobs']
 
 
 def get_jobs():
-    return get_all(depth=0)['jobs']
+    return eval(_urlopen_multi([('api/json?tree=jobs[name,color]', None)]))['jobs']
+
 
 
 def create_job(job_name, job_config):
-    _urlopen("createItem?name={0}".format(_e(job_name)), job_config)
+    _urlopen_multi([("createItem?name={0}".format(_e(job_name)), job_config)])
 
 
 def create_jobs(jobs_and_configs):
@@ -86,15 +94,15 @@ def create_jobs(jobs_and_configs):
 
 
 def delete_job(job_name):
-    return _urlopen("job/{0}/doDelete".format(_e(job_name)), "json=%7B%7D&Submit=Yes")
+    return _urlopen_multi([("job/{0}/doDelete".format(_e(job_name)), "json=%7B%7D&Submit=Yes")])
 
 
 def get_config():
-    return _urlopen(config.JENKINS_JOB_CONFIG_TEMPLATE_PATH)
+    return _urlopen_multi((config.JENKINS_JOB_CONFIG_TEMPLATE_PATH, None))
 
 
 def trigger_build_job(job_name):
-    return _urlopen('job/{0}/build?token={1}'.format(_e(job_name), config.JENKINS_JOB_REBUILD_TOKEN))
+    return _urlopen_multi([('job/{0}/build?token={1}'.format(_e(job_name), config.JENKINS_JOB_REBUILD_TOKEN), None)])
 
 
 def trigger_build_jobs(job_names):

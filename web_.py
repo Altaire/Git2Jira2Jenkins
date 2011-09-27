@@ -112,7 +112,6 @@ class Txt:
 class All:
     def GET(self, url):
         import teams
-        print url
         dbcon = web.ctx.globals.dbcon
 
         jira_task_statuses_ = dbcon.execute('''select jira_task_status from branch group by jira_task_status;''').fetchall()
@@ -151,8 +150,7 @@ def add_global_hoSUCCESS(glob):
 
 
 def init_web(dbcon, jira_priority_map):
-    import sys
-
+    import  sys
     sys.argv[1:] = ['8888']
     app = web.application(urls, globals())
     app.add_processor(add_global_hoSUCCESS({'dbcon':dbcon,'jira_priority_map': jira_priority_map}))

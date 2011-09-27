@@ -1,17 +1,15 @@
 # -*- coding: utf-8
-import logging, re, time, datetime, config, git, jenkins, web_
+import logging, re, time, threading,sys, config, git, jenkins, web_
 
 try:
     from suds.client import Client
 except:
-    import sys
-
     print "Please do (for Ubuntu):\n\tsudo pip install SUDS \nEXIT"
     sys.exit()
 
 
 
-TRACE = False
+TRACE = True
 FORMAT = '%(asctime)-15s  %(levelname)s %(message)s  %(funcName)s %(lineno)s %(exc_info)s'
 logging.basicConfig(filename=config.LOG_FILENAME, level=logging.INFO, format=FORMAT)
 
@@ -54,12 +52,11 @@ def git_delete_removed():
     branches = set([i[0] for i in dbcon.execute('''select branch from branch;''').fetchall()])
     diff = branches.difference(set(remote_branches))
     if TRACE:
-        print "\n\n\n\nDELETE BRANCHES:"
-        print diff
+        print "DELETE BRANCHES: ", diff
     dbcon.executemany('''delete from branch where branch=?;''', map(lambda x: (x,), diff))
 
 
-def git_merge_updated(limit=15):
+def git_merge_updated(limit=20):
     remote_branches, local_branches = git.get_remote_and_local_branches()
     q = dbcon.execute(
         '''select branch from branch where
@@ -91,14 +88,20 @@ def _jira_update_task(soap, auth, jira_task_id):
         jira_task_id
         ))
 
-def jira_update(only_new=True, limit=60):
+def jira_update_new():
+    _jira_update(only_new=True)
+
+def jira_update_obsolete():
+    _jira_update(only_new=False)
+
+def _jira_update(only_new=True, limit=60):
     if only_new:
         q = dbcon.execute('''select DISTINCT branch from branch where jira_task_id is null limit %s;''' % (limit))
     else:
         q = dbcon.execute('''select DISTINCT branch from branch where jira_last_update_time<? limit ?;''', (int(time.time()) + 300, limit) )
     branches = [i[0] for i in q.fetchall()]
     if TRACE:
-        print '\n\n\n OBSOLETE JIRA TASKS:'
+        print 'LOAD JIRA TASKS:'
         print 'only_new: ' , only_new
         print branches
     tasks_and_branches = [(re.match(config.jira_task_regexp, branch).group(), branch) for branch in branches]
@@ -135,7 +138,10 @@ def jira_get_statuses_resolutions_priorities():
 def jenkins_add_jobs(limit=10):
     current_jobs = set([i['name'] for i in jenkins.get_jobs()])
     branches_to_build = set([i[0] for i in dbcon.execute(
-        '''select branch from branch where jira_task_status='Need testing' and git_merge_status='MERGED'
+        '''select branch from branch where
+        (git_master_head_remote is git_master_head_local_done)
+        and (git_remote_head_remote is git_remote_head_local_done)
+        and jira_task_status='Need testing' and git_merge_status='MERGED'
         and not jenkins_branch_head_merged;''').fetchall()])
     new_jobs = list(branches_to_build.difference(current_jobs))[:limit]
     if TRACE:
@@ -150,22 +156,20 @@ def jenkins_add_jobs(limit=10):
         jenkins.trigger_build_jobs(new_jobs)
 
 
-def jenkins_delete_jobs():
+def jenkins_delete_jobs(limit=5):
     jobs = set([i['name'] for i in jenkins.get_jobs() if re.match(config.branch_name_regexp, i['name'])])
     branches = set([i[0] for i in dbcon.execute(
-        '''select branch from branch where jira_task_status='Need testing';''').fetchall()])
-    for branch in jobs.difference(branches):
+        '''select branch from branch where jira_task_status='Need testing' or jira_task_status is null;''').fetchall()])
+    for branch in list(jobs.difference(branches))[:limit]:
         if TRACE:
             print '[JENKINS] delete job:' + repr(branch)
         jenkins.delete_job(branch)
 
 
 def jenkins_get_jobs_result():
-    import time
-
     def _get(result):
         l = []
-        for job in result['jobs']:
+        for job in result:
             try:
                 name = job['name']
             except:
@@ -181,7 +185,7 @@ def jenkins_get_jobs_result():
             l.append({'name': name, 'status': status, 'jenkins_head': jenkins_head})
         return l
 
-    result = jenkins.get_all(depth=2)
+    result = jenkins.get_job_branch_sha1()
     matched_jobs = [(i['status'], i['jenkins_head'], int(time.time()), i['name'])
         for i in _get(result) if re.match(config.branch_name_regexp, i['name'])]
     if TRACE:
@@ -195,12 +199,17 @@ def jenkins_rebuild_obsolete(limit=5):
     current_jobs = set([i['name'] for i in jenkins.get_jobs() if
         (re.match(config.branch_name_regexp, i['name']) and i['color'] == 'blue')])
     obsolete_jobs = set([i[0] for i in dbcon.execute(
-        '''select branch from branch where jira_task_status='Need testing' and 
-            not (git_branch_head_merged is jenkins_branch_head_merged)
+        '''select branch from branch where jira_task_status='Need testing'
+            and git_merge_status='MERGED'
+            and (git_master_head_remote is git_master_head_local_done)
+            and (git_remote_head_remote is git_remote_head_local_done)
+            and not (git_branch_head_merged is jenkins_branch_head_merged)
             order by jira_task_priority;''').fetchall()])
     jobs_to_rebild = list(obsolete_jobs.intersection(current_jobs))[:limit]
     if TRACE:
-        print "[JENKINS]: Rebuild obsolete jobs: " + repr(len(jobs_to_rebild))
+        print "Current_jobs", current_jobs
+        print "Obsolete_jobs", obsolete_jobs
+        print "[JENKINS]: Rebuild obsolete jobs: " + repr(jobs_to_rebild)
     jenkins.trigger_build_jobs(jobs_to_rebild)
 
 
@@ -267,94 +276,73 @@ def init_db():
                         );''')
 
 
-def init_scheduler():
-    import inspect
+tasks = {
+    git_update_remote_heads: 60,
+    git_merge_updated: 60,
+    git_delete_removed: 60,
+    jira_update_new: 60,
+    jira_update_obsolete: 60,
+    jira_get_statuses_resolutions_priorities: 3600,
+    jenkins_add_jobs: 60,
+    jenkins_get_jobs_result: 60,
+    jenkins_rebuild_failed_random: 60,
+    jenkins_rebuild_obsolete: 60,
+    jenkins_delete_jobs: 60
+}
 
-    try:
-        from apscheduler.scheduler import Scheduler
-    except:
-        import sys
-
-        print "Please do:\n\tsudo easy_install apscheduler \nEXIT"
-        sys.exit()
-    sched = Scheduler()
-    sched.configure({'daemonic': 'True'})
-
-    @sched.interval_schedule(seconds=60)
-    def sched_git_update_remote_heads():
-        if TRACE: print inspect.stack()[0][3]
-        git_update_remote_heads()
-
-
-    @sched.interval_schedule(seconds=30)
-    def sched_git_merge_updated():
-        if TRACE: print inspect.stack()[0][3]
-        git_merge_updated()
-
-    @sched.interval_schedule(seconds=30)
-    def sched_git_delete_removed():
-        if TRACE: print inspect.stack()[0][3]
-        git_delete_removed()
-
-    @sched.interval_schedule(seconds=60)
-    def sched_jira_update_obsolete():
-        if TRACE: print inspect.stack()[0][3]
-        jira_update(only_new=False)
-
-    @sched.interval_schedule(seconds=60)
-    def sched_jira_get_new():
-        if TRACE: print inspect.stack()[0][3]
-        jira_update(only_new=True)
-
-##            import utils.memory
-##            print utils.memory.stacksize()
-##            print utils.memory.memory()
-##            print utils.memory.resident()
-##            import utils.reflect
-##            utils.reflect.reflect()
-
-    @sched.interval_schedule(seconds=3600)
-    def sched_jira_get_statuses_resolutions_priorities():
-        if TRACE: print inspect.stack()[0][3]
-        jira_get_statuses_resolutions_priorities()
-
-    @sched.interval_schedule(seconds=60)
-    def sched_jenkins_add_jobs():
-        if TRACE: print inspect.stack()[0][3]
-        jenkins_add_jobs()
-
-    @sched.interval_schedule(seconds=60)
-    def sched_jenkins_get_jobs_result():
-        if TRACE: print inspect.stack()[0][3]
-        jenkins_get_jobs_result()
-
-    @sched.interval_schedule(seconds=180)
-    def sched_jenkins_rebuild_failed_random():
-        if TRACE: print inspect.stack()[0][3]
-        jenkins_rebuild_failed_random()
-
-    @sched.interval_schedule(seconds=60)
-    def sched_jenkins_rebuild_obsolete():
-        if TRACE: print inspect.stack()[0][3]
-        jenkins_rebuild_obsolete()
-
-    @sched.interval_schedule(seconds=120)
-    def sched_jenkins_delete_jobs():
-        if TRACE: print inspect.stack()[0][3]
-        jenkins_delete_jobs()
-
-    sched.start()
+def main_loop():
+    import heapq, traceback
+    h = []
+    for task, timeout in tasks.iteritems():
+        heapq.heappush(h, (time.time(), task))
+    while True:
+        exec_time, task = heapq.heappop(h)
+        if exec_time < time.time():
+            if TRACE:
+                import utils.memory
+                print "\nMemory stats:"
+                print int(utils.memory.stacksize()/1024), "kB stacksize"
+                print int(utils.memory.memory()/1024**2), "MB virt"
+                print int(utils.memory.resident()/1024**2), "MB resident"
+                print int(time.time()), " try to do task...: ", int(exec_time), task
+            try:
+                task()
+                if TRACE:
+                    print int(time.time()), "task done. "
+            except Exception, err:
+                if TRACE:
+                    print traceback.print_exc(file=sys.stdout)
+                logging.warning(traceback.format_exc())
+            finally:
+                heapq.heappush(h, (time.time() + tasks[task], task))
+                if TRACE:
+                    print int(time.time()), " add task again: ", int(time.time()) + tasks[task], task
+        else:
+            #if TRACE:
+            #    print time.time(), " miss task: ", exec_time, task
+            heapq.heappush(h, (exec_time, task))
+        time.sleep(1)
 
 
 if __name__ == '__main__':
     init_db()
-    print('Please wait: cloning %s to %s ...' % (config.GIT_REMOTE_PATH, config.GIT_WORK_DIR))
+    logging.info('Please wait: cloning %s to %s ...' % (config.GIT_REMOTE_PATH, config.GIT_WORK_DIR))
     git.clone()
     git_update_remote_heads()
-    print('Please wait: Initial branch merging ...')
+    logging.info('Please wait: Initial branch merging ...')
     git_merge_updated(limit=5)
-    print('Please wait: Initial jira task information upload ...')
+    logging.info('Please wait: Initial jira task information upload ...')
     jira_get_statuses_resolutions_priorities()
-    jira_update(limit=10)
-    init_scheduler()
+    jira_update_new()
+    loop = threading.Thread(target=main_loop)
+    loop.start()
     web_.init_web(dbcon, jira_priority_map)
+
+
+
+#            import utils.memory
+#            print utils.memory.stacksize()
+#            print utils.memory.memory()
+#            print utils.memory.resident()
+#            import utils.reflect
+#            utils.reflect.reflect()
