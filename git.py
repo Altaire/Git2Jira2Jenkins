@@ -36,7 +36,7 @@ def clone():
         shutil.rmtree(config.GIT_WORK_DIR)
     os.makedirs(config.GIT_WORK_DIR)
     with lock:
-        status, out, err = cmd(['clone', config.GIT_REMOTE_PATH, config.GIT_WORK_DIR], timeout=300)
+        status, out, err = cmd(['clone', config.GIT_REMOTE_PATH, config.GIT_WORK_DIR], timeout=600)
     if status:
         import sys
         logging.error('[GIT] Cannot do action: clone' + "\n EXIT")

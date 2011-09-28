@@ -78,7 +78,7 @@ def get_statistics_by_git_merge_status(dbcon):
 
 
 def get_statistics_by_jenkins_status(dbcon):
-    return dbcon.execute('''select jenkins_status, count(*) from branch where jira_task_status='Need testing' group by jenkins_status;''').fetchall()
+    return dbcon.execute('''select jenkins_status, count(*) from branch where jira_task_status='Need testing' and git_merge_status='MERGED' group by jenkins_status;''').fetchall()
 
 
 urls = ("/",    "Index",

@@ -135,17 +135,19 @@ def jira_get_statuses_resolutions_priorities():
     soap.service.logout()
 
 
-def jenkins_add_jobs(limit=10):
+def jenkins_add_jobs(limit=5):
     current_jobs = set([i['name'] for i in jenkins.get_jobs()])
     branches_to_build = set([i[0] for i in dbcon.execute(
         '''select branch from branch where
         (git_master_head_remote is git_master_head_local_done)
         and (git_remote_head_remote is git_remote_head_local_done)
         and jira_task_status='Need testing' and git_merge_status='MERGED'
-        and not jenkins_branch_head_merged;''').fetchall()])
+        and (jenkins_branch_head_merged is null);''').fetchall()])
     new_jobs = list(branches_to_build.difference(current_jobs))[:limit]
     if TRACE:
-      print '[JENKINS] add jobs:' + repr(new_jobs)
+        print "Current jobs", current_jobs
+        print "Ready to build jobs", branches_to_build
+        print '[JENKINS] add jobs:' + repr(new_jobs)
     if new_jobs:
         config_template = jenkins.get_config()
         jobs_and_configs = map(

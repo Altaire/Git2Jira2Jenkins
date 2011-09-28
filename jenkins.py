@@ -76,11 +76,11 @@ def _urlopen_multi(urls_and_datas):
 
 
 def get_job_branch_sha1():
-    return eval(_urlopen_multi([('api/json?tree=jobs[name,lastBuild[result,actions[lastBuiltRevision[SHA1]]]]', None)]))['jobs']
+    return eval(_urlopen_multi([('api/python?tree=jobs[name,lastBuild[result,actions[lastBuiltRevision[SHA1]]]]', None)]))['jobs']
 
 
 def get_jobs():
-    return eval(_urlopen_multi([('api/json?tree=jobs[name,color]', None)]))['jobs']
+    return eval(_urlopen_multi([('api/python?tree=jobs[name,color]', None)]))['jobs']
 
 
 
@@ -98,7 +98,7 @@ def delete_job(job_name):
 
 
 def get_config():
-    return _urlopen_multi((config.JENKINS_JOB_CONFIG_TEMPLATE_PATH, None))
+    return _urlopen_multi([(config.JENKINS_JOB_CONFIG_TEMPLATE_PATH, None)])
 
 
 def trigger_build_job(job_name):
